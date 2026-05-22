@@ -1,0 +1,111 @@
+# Context And Safety
+
+## Session Snapshot
+
+Maintain this state mentally across an operation and refresh it after edits:
+
+- Transport: tempo, time signature, playing/stopped state, selected track.
+- Structure: track names, indices, kinds, returns, master, scenes, relevant clip slots.
+- Musical metadata: requested or inferred key, scale, genre, section labels, bar range.
+- Track roles: kick, snare/clap, hats, percussion, sub, mid bass, lead, pad, vocal, FX, buses, returns, master.
+- Device state: top-level devices, rack paths from `device-tree`, stock control names, current parameter values.
+- Clip refs: session `--track` plus `--slot`, arrangement `--track` plus `--arrangement-start` or `--arrangement-index`, or a LOM `--path`.
+- Pending risk: destructive commands, bulk scope, UI automation, uncertain targets, user approval.
+
+## Minimum Probes
+
+Start most workflows with:
+
+```sh
+python3 abletonctl.py ping
+python3 abletonctl.py status
+python3 abletonctl.py tracks
+python3 abletonctl.py selected --devices
+```
+
+Then probe the target domain:
+
+```sh
+python3 abletonctl.py devices --track "Bass"
+python3 abletonctl.py device-tree --track "Bass" --depth 5
+python3 abletonctl.py clips --track "Bass"
+python3 abletonctl.py midi-get-notes --track "Bass" --slot 0 --start 0 --end 4
+python3 abletonctl.py stock-controls --device "Auto Filter"
+python3 abletonctl.py params --track "Bass" --device "Auto Filter"
+```
+
+## Targeting Rules
+
+- Prefer exact names for newly created tracks and clips.
+- Prefer indices only after reading `tracks`, `clips`, or `device-tree`.
+- If a name is ambiguous, stop and resolve it with indices instead of guessing.
+- For nested rack devices, use `device-tree` paths and then `--device-path`.
+- For arrangement edits, be explicit about bars/beats. At 4/4, bar 17 starts at beat 64.
+
+## Dry-Run Plan JSON
+
+Use this shape with `scripts/ableton_plan.py` when the plan should be previewed or audited:
+
+```json
+{
+  "summary": "Make the drop hit harder by tightening kick/sub space and adding controlled mid-bass movement.",
+  "assumptions": ["Drop starts at beat 64", "Bass track is named Bass"],
+  "commands": [
+    {
+      "why": "Read current set state before editing.",
+      "args": ["status"]
+    },
+    {
+      "why": "Inspect the bass chain before adding movement.",
+      "args": ["device-tree", "--track", "Bass", "--depth", "5"]
+    }
+  ]
+}
+```
+
+Run dry:
+
+```sh
+python3 skills/ableton-producer/scripts/ableton_plan.py plan.json
+```
+
+Run after approval:
+
+```sh
+python3 skills/ableton-producer/scripts/ableton_plan.py plan.json --execute
+```
+
+For approved destructive execution:
+
+```sh
+python3 skills/ableton-producer/scripts/ableton_plan.py plan.json --execute --allow-destructive
+```
+
+## Risk Classes
+
+Small reversible changes:
+- Add a track, create a new clip, add a device, set a single parameter, set tempo, create a scene, add notes to an empty new clip.
+
+Plan first:
+- Multi-track routing, bus setup, sidechain setup, bulk send changes, arrangement section edits, long MIDI rewrites, rack construction, resampling preparation.
+
+Require approval:
+- `delete-track`, `delete-scene`, `device-delete`, `clip-delete`.
+- `midi-clear-notes`, `midi-replace-notes`, broad `midi-remove-notes`.
+- `clip-automation-clear`, `clip-stock-automation-clear`.
+- `clip-create-midi --replace`, `clip-create-audio --replace`.
+- `save`, export menu actions, focus-dependent UI automation, unfamiliar `lom-set` or `lom-call`.
+
+## Recovery
+
+If a command fails:
+
+1. Read the error and do not blindly retry.
+2. Re-probe the likely stale object: `tracks`, `devices`, `device-tree`, `clips`, or `params`.
+3. If a name is ambiguous, rerun with the exact index/path from probe output.
+4. If a stock control fails, run `stock-controls --device ... --control ...` and use the returned alias.
+5. If a clip slot already has a clip, either choose a free slot or ask before using `--replace`.
+6. If a local macOS command fails, mention Accessibility or focus requirements and switch to a bridge/LOM command when possible.
+7. If the edit partially succeeded, refresh touched state and explain the clean continuation path.
+
+Use `python3 abletonctl.py undo` only when the last command clearly caused the unwanted edit and undo will not erase user work performed after it.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ableton Producer"
+  short_description: "Control Ableton from producer intent"
+  default_prompt: "Use $ableton-producer to turn my production request into a safe Ableton CLI plan."
