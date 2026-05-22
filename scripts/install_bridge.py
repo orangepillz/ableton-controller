@@ -9,6 +9,7 @@ import json
 import os
 import plistlib
 import shutil
+import signal
 import socket
 import subprocess
 import time
@@ -23,6 +24,7 @@ DEFAULT_PREFS_ROOT = Path.home() / "Library" / "Preferences" / "Ableton"
 DEFAULT_AGENT_DIR = Path.home() / "Library" / "Application Support" / "CodexAbleton"
 DEFAULT_LAUNCH_AGENTS = Path.home() / "Library" / "LaunchAgents"
 MIDI_AGENT_LABEL = "com.codex.ableton-midi-ports"
+RECOVERY_TRIGGER_NAMES = ("CrashRecoveryInfo.cfg", "BaseFiles", "Undo")
 
 
 def copytree_replace(source: Path, destination: Path) -> None:
@@ -102,10 +104,17 @@ def restart_activate(args: argparse.Namespace) -> None:
         cleanup_unsaved_project(args)
         if args.unsaved_action == "stop":
             raise SystemExit(
-                "Refusing to restart an unsaved Live set without force quitting. "
-                "Save the set first, or rerun with --unsaved-action discard "
-                "and --unsaved-dialog-button after confirming the button index."
+                "Refusing to restart an unsaved Live set. Save the set first, "
+                "or rerun with --unsaved-action force-discard-recovery to force quit "
+                "and quarantine Live's recovery trigger files."
             )
+        if args.unsaved_action == "force-discard-recovery":
+            force_discard_unsaved_project(args)
+            activate(args)
+            print(f"Reopening {args.app_name}...")
+            subprocess.run(["open", "-a", args.app_name], check=True)
+            print("Live reopened. Wait for startup, then run: python3 abletonctl.py ping")
+            return
     else:
         raise SystemExit("Could not determine whether the Live set has a saved path, so Live was not quit.")
 
@@ -195,6 +204,87 @@ def cleanup_unsaved_project(args: argparse.Namespace) -> None:
             args.bridge_timeout,
         )
         print(f"Deleted unsaved scratch track: {track['name']}")
+
+
+def force_discard_unsaved_project(args: argparse.Namespace) -> None:
+    before = recovery_snapshot(args)
+    existing_triggers = sorted(path for path in before if path.parent == live_preferences_dir(args))
+    if existing_triggers:
+        raise SystemExit(
+            "Live already has pending recovery trigger files before force quit, so refusing to discard them: %s"
+            % ", ".join(str(path) for path in existing_triggers)
+        )
+    print("Force quitting unsaved Live set, then quarantining recovery trigger files before reopen.")
+    force_quit_live(args.process_pattern, args.quit_timeout)
+    quarantined = quarantine_new_recovery_files(args, before)
+    if quarantined:
+        print("Quarantined Live recovery files:")
+        for source, destination in quarantined:
+            print(f"  {source} -> {destination}")
+    else:
+        print("No new Live recovery files were found to quarantine.")
+
+
+def live_preferences_dir(args: argparse.Namespace) -> Path:
+    if args.preferences:
+        return Path(args.preferences).expanduser().resolve().parent
+    return DEFAULT_PREFS_ROOT / args.live_version
+
+
+def recovery_snapshot(args: argparse.Namespace) -> set[Path]:
+    return set(recovery_candidates(live_preferences_dir(args)))
+
+
+def recovery_candidates(preferences_dir: Path) -> list[Path]:
+    candidates = [preferences_dir / name for name in RECOVERY_TRIGGER_NAMES]
+    crash_dir = preferences_dir / "Crash"
+    if crash_dir.exists():
+        candidates.extend(crash_dir.iterdir())
+    return [path for path in candidates if path.exists()]
+
+
+def quarantine_new_recovery_files(args: argparse.Namespace, before: set[Path]) -> list[tuple[Path, Path]]:
+    preferences_dir = live_preferences_dir(args)
+    timestamp = _datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    quarantine_root = Path(args.recovery_quarantine_dir).expanduser() / f"{args.live_version}-{timestamp}"
+    moved = []
+    for source in sorted(recovery_candidates(preferences_dir), key=lambda path: str(path)):
+        if source in before:
+            continue
+        destination = quarantine_root / source.relative_to(preferences_dir)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        moved.append((source, destination))
+    return moved
+
+
+def force_quit_live(pattern: str, timeout: float) -> None:
+    pids = live_process_ids(pattern)
+    if not pids:
+        return
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    if not wait_for_live_to_quit(pattern, timeout):
+        raise SystemExit("Live did not exit after force quit.")
+
+
+def live_process_ids(pattern: str) -> list[int]:
+    result = subprocess.run(["pgrep", "-fl", pattern], capture_output=True, text=True)
+    pids = []
+    for line in result.stdout.splitlines():
+        if "Ableton Index" in line:
+            continue
+        parts = line.split(maxsplit=1)
+        if not parts:
+            continue
+        try:
+            pids.append(int(parts[0]))
+        except ValueError:
+            pass
+    return pids
 
 
 def request_live_quit(args: argparse.Namespace) -> None:
@@ -374,9 +464,13 @@ def build_parser() -> argparse.ArgumentParser:
     restart_parser.add_argument("--dialog-timeout", type=float, default=8.0)
     restart_parser.add_argument(
         "--unsaved-action",
-        choices=("stop", "discard"),
+        choices=("stop", "discard", "force-discard-recovery"),
         default="stop",
-        help="What to do when the current set has no file path. 'discard' presses a Live dialog button; never force-quits.",
+        help=(
+            "What to do when the current set has no file path. "
+            "'discard' presses a Live dialog button; "
+            "'force-discard-recovery' force-quits and quarantines recovery trigger files."
+        ),
     )
     restart_parser.add_argument(
         "--unsaved-dialog-button",
@@ -388,6 +482,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Before discarding an unsaved set, delete regular tracks whose names start with this prefix. Can be repeated.",
+    )
+    restart_parser.add_argument(
+        "--recovery-quarantine-dir",
+        default=str(DEFAULT_AGENT_DIR / "recovery-quarantine"),
+        help="Directory for recovery files moved out of Ableton preferences after unsaved force discard.",
     )
     restart_parser.set_defaults(func=restart_activate)
 

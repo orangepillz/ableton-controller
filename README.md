@@ -35,17 +35,20 @@ Then activate the `Codex_AI` control surface in Live, or use the restart activat
 python3 scripts/install_bridge.py restart-activate --replace Alesis_V
 ```
 
-`restart-activate` saves already-saved Live sets before requesting a normal quit. It will
-not force-quit an unsaved set, because that can make Live show a recovery prompt on the
-next launch. For a throwaway unsaved set, clean up scratch tracks first, then explicitly
-choose the discard flow:
+`restart-activate` saves already-saved Live sets before requesting a normal quit. If the
+current set has no file path, it refuses to guess by default. For a throwaway unsaved
+set, it can clean up scratch tracks, force quit Live, quarantine Live's recovery trigger
+files, and reopen without the recovery prompt:
 
 ```sh
 python3 scripts/install_bridge.py restart-activate --replace Alesis_V \
   --cleanup-track-prefix "Codex " \
-  --unsaved-action discard \
-  --unsaved-dialog-button BUTTON_INDEX
+  --unsaved-action force-discard-recovery
 ```
+
+That force-discard path only runs when Live reports an empty `song.file_path`; if a set
+has already been saved, the helper saves it and uses the normal quit path instead.
+Recovery files are moved to `~/Library/Application Support/CodexAbleton/recovery-quarantine/`.
 
 The LaunchAgent keeps `V61 (Out)` and `V61 (In)` available for the control-surface slot.
 
