@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as _datetime
+import json
 import os
 import plistlib
 import shutil
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -88,7 +90,114 @@ def show(args: argparse.Namespace) -> None:
 
 def restart_activate(args: argparse.Namespace) -> None:
     install(args)
+    live_set_path = live_set_file_path(args)
+    if live_set_path:
+        print(f"Live set has a saved path; saving before quit: {live_set_path}")
+        try:
+            save_live_set(args)
+        except RuntimeError as error:
+            raise SystemExit(f"Could not save the existing Live set, so Live was not quit: {error}")
+    elif live_set_path == "":
+        print("Live set has no saved path.")
+        cleanup_unsaved_project(args)
+        if args.unsaved_action == "stop":
+            raise SystemExit(
+                "Refusing to restart an unsaved Live set without force quitting. "
+                "Save the set first, or rerun with --unsaved-action discard "
+                "and --unsaved-dialog-button after confirming the button index."
+            )
+    else:
+        raise SystemExit("Could not determine whether the Live set has a saved path, so Live was not quit.")
+
     print(f"Requesting quit for {args.app_name}...")
+    request_live_quit(args)
+    if live_set_path == "" and args.unsaved_action == "discard":
+        discard_unsaved_dialog(args)
+    if not wait_for_live_to_quit(args.process_pattern, args.quit_timeout):
+        raise SystemExit("Live did not quit normally; refusing to force quit because it would trigger recovery on next launch.")
+    activate(args)
+    print(f"Reopening {args.app_name}...")
+    subprocess.run(["open", "-a", args.app_name], check=True)
+    print("Live reopened. Wait for startup, then run: python3 abletonctl.py ping")
+
+
+def live_set_file_path(args: argparse.Namespace) -> str | None:
+    try:
+        value = bridge_request(
+            {"command": "lom_get", "path": "song.file_path"},
+            args.bridge_host,
+            args.bridge_port,
+            args.bridge_timeout,
+        )
+    except Exception as error:
+        print(f"Could not read Live set file path from bridge: {error}")
+        return None
+    if value is None:
+        return ""
+    return str(value)
+
+
+def bridge_request(payload: dict, host: str, port: int, timeout: float):
+    data = (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")
+    with socket.create_connection((host, port), timeout=timeout) as sock:
+        sock.settimeout(timeout)
+        sock.sendall(data)
+        chunks = []
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            if b"\n" in chunk:
+                break
+    if not chunks:
+        raise RuntimeError("empty bridge response")
+    response = json.loads(b"".join(chunks).decode("utf-8"))
+    if not response.get("ok", False):
+        raise RuntimeError(response.get("error", "unknown bridge error"))
+    return response.get("result")
+
+
+def save_live_set(args: argparse.Namespace) -> None:
+    subprocess.run(["open", "-a", args.app_name], check=True)
+    run_applescript(
+        [
+            "delay 0.150",
+            'tell application "System Events"',
+            '  keystroke "s" using {command down}',
+            "end tell",
+        ],
+        args.automation_timeout,
+    )
+    time.sleep(max(0.0, args.save_wait))
+
+
+def cleanup_unsaved_project(args: argparse.Namespace) -> None:
+    prefixes = [prefix for prefix in args.cleanup_track_prefix if prefix]
+    if not prefixes:
+        return
+    tracks = bridge_request(
+        {"command": "tracks"},
+        args.bridge_host,
+        args.bridge_port,
+        args.bridge_timeout,
+    ).get("tracks", [])
+    matches = [
+        track
+        for track in tracks
+        if any(str(track.get("name", "")).startswith(prefix) for prefix in prefixes)
+    ]
+    for track in sorted(matches, key=lambda item: int(item["index"]), reverse=True):
+        bridge_request(
+            {"command": "delete_track", "track": int(track["index"])},
+            args.bridge_host,
+            args.bridge_port,
+            args.bridge_timeout,
+        )
+        print(f"Deleted unsaved scratch track: {track['name']}")
+
+
+def request_live_quit(args: argparse.Namespace) -> None:
     try:
         quit_result = subprocess.run(
             ["osascript", "-e", f'tell application "{args.app_name}" to quit'],
@@ -98,26 +207,74 @@ def restart_activate(args: argparse.Namespace) -> None:
             text=True,
         )
     except subprocess.TimeoutExpired:
-        raise SystemExit(
-            "Timed out requesting Live to quit. If Live is showing an unsaved-changes dialog, "
-            "handle it and run this command again."
-        )
+        print("Timed out while requesting normal quit; checking Live dialogs.")
+        return
     if quit_result.returncode != 0:
         detail = quit_result.stderr.strip() or quit_result.stdout.strip() or "unknown osascript error"
-        raise SystemExit(
-            "Live declined the quit request: %s\n"
-            "If Live is showing an unsaved-changes dialog, handle it and run this command again." % detail
-        )
-    if not wait_for_live_to_quit(args.process_pattern, args.quit_timeout):
-        raise SystemExit(
-            "Live did not quit before the timeout. If Live is showing an unsaved-changes dialog, "
-            "handle it and run this command again."
-        )
-    activate(args)
-    print(f"Reopening {args.app_name}...")
-    subprocess.run(["open", "-a", args.app_name], check=True)
-    print("Live reopened. Wait for startup, then run: python3 abletonctl.py ping")
+        print(f"Normal quit request returned an error; checking Live dialogs: {detail}")
 
+
+def discard_unsaved_dialog(args: argparse.Namespace) -> None:
+    if args.unsaved_dialog_button is None:
+        message = current_dialog_message(args)
+        count = current_dialog_button_count(args)
+        raise SystemExit(
+            "Unsaved discard requested, but --unsaved-dialog-button was not provided. "
+            "Live dialog button count: %s. Message: %r" % (count, message)
+        )
+    if not wait_for_live_dialog(args, args.dialog_timeout):
+        print("No Live dialog appeared after quit request; continuing to wait for normal quit.")
+        return
+    count = current_dialog_button_count(args)
+    index = int(args.unsaved_dialog_button)
+    if index < 0 or index >= count:
+        raise SystemExit("Dialog button index %s is outside the current button count %s." % (index, count))
+    bridge_request(
+        {"command": "lom_call", "path": "application.press_current_dialog_button", "args": [index]},
+        args.bridge_host,
+        args.bridge_port,
+        args.bridge_timeout,
+    )
+
+
+def wait_for_live_dialog(args: argparse.Namespace, timeout: float) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if current_dialog_button_count(args) > 0:
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def current_dialog_message(args: argparse.Namespace) -> str:
+    return bridge_request(
+        {"command": "lom_get", "path": "application.current_dialog_message"},
+        args.bridge_host,
+        args.bridge_port,
+        args.bridge_timeout,
+    )
+
+
+def current_dialog_button_count(args: argparse.Namespace) -> int:
+    return int(bridge_request(
+        {"command": "lom_get", "path": "application.current_dialog_button_count"},
+        args.bridge_host,
+        args.bridge_port,
+        args.bridge_timeout,
+    ))
+
+
+def run_applescript(lines: list[str], timeout: float) -> None:
+    command = ["osascript"]
+    for line in lines:
+        command.extend(["-e", line])
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("osascript timed out")
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown osascript failure"
+        raise RuntimeError(detail)
 
 def install_midi_agent(args: argparse.Namespace) -> None:
     binary = Path(args.binary).expanduser().resolve()
@@ -209,6 +366,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     restart_parser.add_argument("--quit-request-timeout", type=float, default=10.0)
     restart_parser.add_argument("--quit-timeout", type=float, default=90.0)
+    restart_parser.add_argument("--bridge-host", default="127.0.0.1")
+    restart_parser.add_argument("--bridge-port", type=int, default=37337)
+    restart_parser.add_argument("--bridge-timeout", type=float, default=3.0)
+    restart_parser.add_argument("--save-wait", type=float, default=2.0)
+    restart_parser.add_argument("--automation-timeout", type=float, default=5.0)
+    restart_parser.add_argument("--dialog-timeout", type=float, default=8.0)
+    restart_parser.add_argument(
+        "--unsaved-action",
+        choices=("stop", "discard"),
+        default="stop",
+        help="What to do when the current set has no file path. 'discard' presses a Live dialog button; never force-quits.",
+    )
+    restart_parser.add_argument(
+        "--unsaved-dialog-button",
+        type=int,
+        help="Button index to press for --unsaved-action discard, as exposed by Live's current dialog API.",
+    )
+    restart_parser.add_argument(
+        "--cleanup-track-prefix",
+        action="append",
+        default=[],
+        help="Before discarding an unsaved set, delete regular tracks whose names start with this prefix. Can be repeated.",
+    )
     restart_parser.set_defaults(func=restart_activate)
 
     midi_agent_parser = sub.add_parser("install-midi-agent", help="Install and start the CoreMIDI virtual-port LaunchAgent.")

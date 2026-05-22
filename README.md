@@ -35,6 +35,18 @@ Then activate the `Codex_AI` control surface in Live, or use the restart activat
 python3 scripts/install_bridge.py restart-activate --replace Alesis_V
 ```
 
+`restart-activate` saves already-saved Live sets before requesting a normal quit. It will
+not force-quit an unsaved set, because that can make Live show a recovery prompt on the
+next launch. For a throwaway unsaved set, clean up scratch tracks first, then explicitly
+choose the discard flow:
+
+```sh
+python3 scripts/install_bridge.py restart-activate --replace Alesis_V \
+  --cleanup-track-prefix "Codex " \
+  --unsaved-action discard \
+  --unsaved-dialog-button BUTTON_INDEX
+```
+
 The LaunchAgent keeps `V61 (Out)` and `V61 (In)` available for the control-surface slot.
 
 Verify:
@@ -57,18 +69,33 @@ List devices on a track:
 
 ```sh
 python3 abletonctl.py devices --track "Synth"
+python3 abletonctl.py device-tree --track "Synth" --depth 4
 ```
 
-List parameters on a device:
+Add, move, delete, and inspect stock Live devices:
 
 ```sh
+python3 abletonctl.py device-add-stock --target-track "Vox" --name "EQ Eight" --root audio_effects --target-index 0
+python3 abletonctl.py device-add-stock --target-track "Vox" --path "audio_effects/Auto Filter" --target-index 1
+python3 abletonctl.py device-move --source-track "Vox" --source-device "Auto Filter" --target-track "Vox" --target-index 0
+python3 abletonctl.py device-delete --track "Vox" --device "Auto Filter"
 python3 abletonctl.py params --track "Synth" --device "EQ Eight"
+```
+
+Use `device-tree` paths to target devices inside racks and rack chains:
+
+```sh
+python3 abletonctl.py device-tree --track "Vox"
+python3 abletonctl.py device-add-stock --target-path "song.tracks[30].devices[0].chains[0]" --path "audio_effects/Compressor" --target-index 0
+python3 abletonctl.py device-move --source-device-path "song.tracks[30].devices[0].chains[0].devices[1]" --target-path "song.tracks[30].devices[0].chains[0]" --target-index 0
+python3 abletonctl.py params --device-path "song.tracks[30].devices[0].chains[0].devices[0]"
 ```
 
 Set a device parameter:
 
 ```sh
 python3 abletonctl.py set-param --track "Synth" --device "EQ Eight" --param "1 Frequency A" --value 180
+python3 abletonctl.py set-param --device-path "song.tracks[30].devices[0].chains[0].devices[0]" --param Threshold --normalized 0.35
 ```
 
 Inspect and use raw Live Object Model paths:
@@ -158,6 +185,17 @@ Warp modes can be passed by name (`beats`, `tones`, `texture`, `repitch`,
 For marker adds, `--sample-time` is optional; when omitted, the bridge
 interpolates from the current marker map to preserve playback timing. Marker
 commands require the clip's Warp switch to already be on.
+
+Automate device parameters inside Session or Arrangement clips:
+
+```sh
+python3 abletonctl.py clip-automation-set --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.15},{"time":1,"duration":1,"normalized":0.85}]'
+python3 abletonctl.py clip-automation-get --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency --times 0,0.25,1.25
+python3 abletonctl.py clip-automation-clear --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency
+```
+
+Automation steps accept raw `value` or normalized `0..1` values. Nested rack devices can
+be automated with `--device-path`, or with `--device-track` plus a top-level device name.
 
 Send a raw JSON command:
 

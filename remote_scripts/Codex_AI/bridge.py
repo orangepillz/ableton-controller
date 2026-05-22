@@ -147,10 +147,17 @@ class CodexBridge(ControlSurface):
         if command == "devices":
             track = self._resolve_track(payload.get("track"))
             return {"track": track.name, "devices": self._device_infos(track)}
+        if command == "device_tree":
+            return self._device_tree(payload)
+        if command == "device_add_stock":
+            return self._device_add_stock(payload)
+        if command == "device_move":
+            return self._device_move(payload)
+        if command == "device_delete":
+            return self._device_delete(payload)
         if command == "params":
-            track = self._resolve_track(payload.get("track"))
-            device = self._resolve_device(track, payload.get("device"))
-            return {"track": track.name, "device": device.name, "parameters": self._parameter_infos(device)}
+            device = self._resolve_device_ref(payload)
+            return {"device": self._device_info(device, self._device_index(device)), "parameters": self._parameter_infos(device)}
         if command == "set_track":
             return self._set_track(payload)
         if command == "set_send":
@@ -249,6 +256,12 @@ class CodexBridge(ControlSurface):
             return self._clip_warp_marker_move(payload)
         if command == "clip_warp_marker_remove":
             return self._clip_warp_marker_remove(payload)
+        if command == "clip_automation_get":
+            return self._clip_automation_get(payload)
+        if command == "clip_automation_set":
+            return self._clip_automation_set(payload)
+        if command == "clip_automation_clear":
+            return self._clip_automation_clear(payload)
         if command == "clip_delete":
             return self._clip_delete(payload)
         if command == "clip_copy":
@@ -372,6 +385,93 @@ class CodexBridge(ControlSurface):
                 info["clip"] = self._clip_info(slot.clip)
             slots.append(info)
         return {"track": track.name, "arrangement_clips": arrangement, "clip_slots": slots}
+
+    def _device_tree(self, payload):
+        track = self._resolve_track(payload.get("track"))
+        depth = max(0, int(payload.get("depth", 4)))
+        path = self._track_path(track)
+        return {"track": self._track_info(track, self._track_index(track), self._track_kind(track)), "path": path, "devices": self._device_tree_devices(track, path, depth)}
+
+    def _device_add_stock(self, payload):
+        container = self._resolve_container_ref(payload, "target")
+        item = self._resolve_stock_device_item(payload)
+        if not payload.get("allow_presets", False):
+            if not self._safe_get(item, "is_device", False):
+                raise ValueError("Browser item is not a stock device. Use --allow-presets to load presets: %s" % self._safe_get(item, "name", ""))
+            if self._safe_get(item, "source", "") != "Built-in":
+                raise ValueError("Browser item is not a built-in Live device: %s" % self._safe_get(item, "name", ""))
+
+        target_index = payload.get("target_index", None)
+        owner_track = self._track_for_container(container)
+        owner_order = list(owner_track.devices)
+        container_order = owner_order if container == owner_track else list(container.devices)
+        owner_before = self._device_identity_set(owner_track)
+        container_before = self._device_identity_set(container)
+        try:
+            self.song().view.selected_track = owner_track
+        except Exception:
+            pass
+
+        if hasattr(container, "insert_device"):
+            name = self._safe_get(item, "name", payload.get("name") or payload.get("path"))
+            args = [str(name)] if target_index is None else [str(name), int(target_index)]
+            try:
+                container.insert_device(*args)
+                device = self._new_or_last_device(container, container_before)
+                return {
+                    "item": self._browser_item_info(item),
+                    "target": self._container_info(container),
+                    "device": self._device_info(device, self._device_index(device)),
+                    "devices": self._container_device_infos(container),
+                    "done": True,
+                }
+            except Exception:
+                pass
+
+        self.application().browser.load_item(item)
+        device = self._new_or_last_device(owner_track, owner_before)
+        if container == owner_track:
+            inserted_index = len(container_order) if target_index is None else int(target_index)
+            desired_order = [candidate for candidate in container_order if candidate != device]
+            desired_order.insert(max(0, min(inserted_index, len(desired_order))), device)
+            self._reorder_container_devices(container, desired_order)
+            inserted_index = self._device_index(device, container)
+            device = self._device_at(container, inserted_index)
+        else:
+            inserted_index = len(container.devices) if target_index is None else int(target_index)
+            inserted_index = self.song().move_device(device, container, inserted_index)
+            self._reorder_container_devices(owner_track, owner_order)
+            device = self._device_at(container, inserted_index)
+        return {
+            "item": self._browser_item_info(item),
+            "target": self._container_info(container),
+            "device": self._device_info(device, self._device_index(device)),
+            "devices": self._container_device_infos(container),
+            "done": True,
+        }
+
+    def _device_move(self, payload):
+        device = self._resolve_device_ref(payload, "source")
+        target = self._resolve_container_ref(payload, "target")
+        requested_index = int(payload.get("target_index"))
+        inserted_index = self.song().move_device(device, target, requested_index)
+        moved = self._device_at(target, inserted_index)
+        return {
+            "target": self._container_info(target),
+            "requested_index": requested_index,
+            "inserted_index": inserted_index,
+            "device": self._device_info(moved, inserted_index),
+            "devices": self._container_device_infos(target),
+            "done": True,
+        }
+
+    def _device_delete(self, payload):
+        ref = self._resolve_device_ref_info(payload)
+        container = ref["container"]
+        index = ref["index"]
+        info = self._device_info(ref["device"], index)
+        container.delete_device(index)
+        return {"container": self._container_info(container), "deleted_device": info, "devices": self._container_device_infos(container), "done": True}
 
     def _clip_create_midi(self, payload):
         track = self._resolve_track(payload.get("track"))
@@ -534,6 +634,61 @@ class CodexBridge(ControlSurface):
         beat_time = float(payload.get("beat_time"))
         clip.remove_warp_marker(beat_time)
         return self._clip_warp_info(ref, {"removed_marker": {"beat_time": beat_time}})
+
+    def _clip_automation_get(self, payload):
+        clip = self._resolve_clip(payload)
+        parameter = self._resolve_parameter_ref(payload)
+        envelope = self._automation_envelope(clip, parameter, False)
+        times = payload.get("times", [])
+        values = []
+        if envelope is not None:
+            for time_value in times:
+                values.append({"time": float(time_value), "value": self._automation_value_at_time(envelope, float(time_value))})
+        return {
+            "clip": self._clip_info(clip),
+            "parameter": self._parameter_info(parameter),
+            "has_envelope": envelope is not None,
+            "envelope": self._automation_envelope_info(envelope),
+            "values": values,
+        }
+
+    def _clip_automation_set(self, payload):
+        clip = self._resolve_clip(payload)
+        parameter = self._resolve_parameter_ref(payload)
+        steps = payload.get("steps", [])
+        if not isinstance(steps, list):
+            raise ValueError("steps must be a list")
+        if payload.get("clear", False):
+            self._clear_parameter_envelope(clip, parameter)
+        envelope = self._automation_envelope(clip, parameter, True)
+        inserted = []
+        for step in steps:
+            if not isinstance(step, dict):
+                raise ValueError("Each automation step must be an object")
+            time_value = float(step.get("time", step.get("start", 0.0)))
+            duration = float(step.get("duration", step.get("length", 0.0)))
+            if duration <= 0.0:
+                raise ValueError("Automation step duration must be greater than 0")
+            value = self._automation_step_value(parameter, step)
+            self._insert_automation_step(envelope, time_value, duration, value)
+            inserted.append({"time": time_value, "duration": duration, "value": value})
+        return {
+            "clip": self._clip_info(clip),
+            "parameter": self._parameter_info(parameter),
+            "inserted": inserted,
+            "envelope": self._automation_envelope_info(envelope),
+            "values": [{"time": item["time"], "value": self._automation_value_at_time(envelope, item["time"])} for item in inserted],
+            "done": True,
+        }
+
+    def _clip_automation_clear(self, payload):
+        clip = self._resolve_clip(payload)
+        if payload.get("all", False):
+            clip.clear_all_envelopes()
+            return {"clip": self._clip_info(clip), "cleared": "all", "done": True}
+        parameter = self._resolve_parameter_ref(payload)
+        self._clear_parameter_envelope(clip, parameter)
+        return {"clip": self._clip_info(clip), "parameter": self._parameter_info(parameter), "cleared": "parameter", "done": True}
 
     def _clip_warp_info(self, ref, changed=None):
         clip = ref["clip"]
@@ -762,6 +917,46 @@ class CodexBridge(ControlSurface):
             raise ValueError("Unknown browser action: %r" % action)
         return {"action": action, "item": self._browser_item_info(item), "done": True}
 
+    def _resolve_stock_device_item(self, payload):
+        path = payload.get("path")
+        if path:
+            return self._resolve_browser_item(path)
+        name = payload.get("name")
+        if not name:
+            raise ValueError("name or path is required")
+        roots = [payload.get("root")] if payload.get("root") else ["audio_effects", "midi_effects", "instruments"]
+        matches = []
+        for root_name in roots:
+            root = getattr(self.application().browser, root_name)
+            self._find_stock_device_items(root, root_name, name, matches, 0, 7, 6000)
+        exact = [item for item in matches if self._normalize_name(self._safe_get(item, "name", "")) == self._normalize_name(name)]
+        choices = exact or matches
+        if len(choices) == 1:
+            return choices[0]
+        if choices:
+            raise ValueError("Ambiguous stock device %r: %s" % (name, [self._safe_get(item, "name", "") for item in choices[:12]]))
+        raise ValueError("No stock device named %r" % name)
+
+    def _find_stock_device_items(self, item, path, name, matches, depth, max_depth, max_items):
+        if len(matches) >= 20 or depth > max_depth or max_items <= 0:
+            return max_items
+        max_items -= 1
+        normalized = self._normalize_name(name)
+        item_name = self._safe_get(item, "name", "")
+        if (
+            normalized in self._normalize_name(item_name)
+            and self._safe_get(item, "is_loadable", False)
+            and self._safe_get(item, "is_device", False)
+            and self._safe_get(item, "source", "") == "Built-in"
+        ):
+            matches.append(item)
+        for child in self._browser_item_children(item):
+            if max_items <= 0 or len(matches) >= 20:
+                break
+            child_path = self._browser_child_path(path, child)
+            max_items = self._find_stock_device_items(child, child_path, name, matches, depth + 1, max_depth, max_items)
+        return max_items
+
     def _browser_root_names(self):
         return [
             "sounds",
@@ -810,6 +1005,15 @@ class CodexBridge(ControlSurface):
 
     def _find_named_child(self, item, name):
         normalized = self._normalize_name(name)
+        exact = [
+            child
+            for child in self._browser_item_children(item)
+            if normalized == self._normalize_name(getattr(child, "name", ""))
+        ]
+        if len(exact) == 1:
+            return exact[0]
+        if len(exact) > 1:
+            raise ValueError("Ambiguous browser item %r: %s" % (name, [child.name for child in exact]))
         matches = [
             child
             for child in self._browser_item_children(item)
@@ -1289,6 +1493,66 @@ class CodexBridge(ControlSurface):
         except Exception:
             pass
 
+    def _automation_envelope(self, clip, parameter, create):
+        envelope = None
+        try:
+            envelope = clip.automation_envelope(parameter)
+        except Exception:
+            envelope = None
+        if envelope is None and create:
+            envelope = clip.create_automation_envelope(parameter)
+        return envelope
+
+    def _clear_parameter_envelope(self, clip, parameter):
+        try:
+            clip.clear_envelope(parameter)
+        except Exception:
+            envelope = self._automation_envelope(clip, parameter, False)
+            if envelope is not None:
+                self._clear_automation_envelope_steps(envelope)
+
+    def _clear_automation_envelope_steps(self, envelope):
+        for name in ("clear_all_steps", "clear"):
+            method = getattr(envelope, name, None)
+            if callable(method):
+                method()
+                return
+        length = 1576800.0
+        method = getattr(envelope, "clear_steps", None)
+        if callable(method):
+            method(0.0, length)
+            return
+        raise ValueError("Automation envelope cannot be cleared by this Live API")
+
+    def _automation_step_value(self, parameter, step):
+        if "normalized" in step:
+            normalized = self._clamp_float(float(step["normalized"]), 0.0, 1.0)
+            return float(parameter.min) + (float(parameter.max) - float(parameter.min)) * normalized
+        if "value" not in step:
+            raise ValueError("Automation step needs value or normalized")
+        return self._clamp_float(float(step["value"]), float(parameter.min), float(parameter.max))
+
+    def _insert_automation_step(self, envelope, time_value, duration, value):
+        method = getattr(envelope, "insert_step", None)
+        if not callable(method):
+            raise ValueError("Automation envelope does not support insert_step")
+        method(float(time_value), float(duration), float(value))
+
+    def _automation_value_at_time(self, envelope, time_value):
+        method = getattr(envelope, "value_at_time", None)
+        if not callable(method):
+            return None
+        return method(float(time_value))
+
+    def _automation_envelope_info(self, envelope):
+        if envelope is None:
+            return None
+        return {
+            "type": type(envelope).__name__,
+            "points": self._serialize(self._safe_get(envelope, "points")),
+            "step_count": self._safe_get(envelope, "step_count"),
+        }
+
     def _add_warp_marker(self, clip, beat_time, sample_time):
         if sample_time is None:
             sample_time = self._sample_time_for_beat(clip, beat_time)
@@ -1549,8 +1813,7 @@ class CodexBridge(ControlSurface):
         return {"track": track.name, "send": index, "parameter": self._parameter_info(parameter)}
 
     def _set_param(self, payload):
-        track = self._resolve_track(payload.get("track"))
-        device = self._resolve_device(track, payload.get("device"))
+        device = self._resolve_device_ref(payload)
         parameter = self._resolve_parameter(device, payload.get("param"))
         if "normalized" in payload:
             self._set_parameter(parameter, normalized=float(payload["normalized"]))
@@ -1561,8 +1824,7 @@ class CodexBridge(ControlSurface):
         else:
             raise ValueError("set_param requires value, normalized, or delta")
         return {
-            "track": track.name,
-            "device": device.name,
+            "device": self._device_info(device, self._device_index(device)),
             "parameter": self._parameter_info(parameter),
         }
 
@@ -1701,6 +1963,175 @@ class CodexBridge(ControlSurface):
             if track.name.lower() == lowered:
                 return track
         raise ValueError("Unknown return track: %r" % identifier)
+
+    def _resolve_device_ref(self, payload, prefix=""):
+        info = self._resolve_device_ref_info(payload, prefix)
+        return info["device"]
+
+    def _resolve_device_ref_info(self, payload, prefix=""):
+        device_path = self._prefixed(payload, prefix, "device_path", None)
+        if device_path:
+            device = self._resolve_lom_path(device_path)
+            if not hasattr(device, "parameters") or not hasattr(device, "class_name"):
+                raise ValueError("Path did not resolve to a device")
+            container = self._device_container(device)
+            return {"device": device, "container": container, "index": self._device_index(device, container)}
+
+        track = self._resolve_track(self._prefixed(payload, prefix, "track"))
+        device = self._resolve_device(track, self._prefixed(payload, prefix, "device"))
+        return {"device": device, "container": track, "index": self._device_index(device, track)}
+
+    def _resolve_parameter_ref(self, payload):
+        device = self._resolve_device_ref(payload)
+        return self._resolve_parameter(device, payload.get("param"))
+
+    def _resolve_container_ref(self, payload, prefix="target"):
+        path = self._prefixed(payload, prefix, "path", None)
+        if path:
+            container = self._resolve_lom_path(path)
+            self._ensure_device_container(container)
+            return container
+        track_identifier = self._prefixed(payload, prefix, "track", None)
+        return self._resolve_track(track_identifier)
+
+    def _ensure_device_container(self, container):
+        if not hasattr(container, "devices"):
+            raise ValueError("Target must be a Track or Rack Chain with devices")
+
+    def _track_for_container(self, container):
+        current = container
+        while current is not None:
+            if hasattr(current, "clip_slots") and hasattr(current, "mixer_device"):
+                return current
+            current = self._safe_get(current, "canonical_parent")
+        raise ValueError("Could not resolve the owning track for target container")
+
+    def _device_container(self, device):
+        container = self._safe_get(device, "canonical_parent")
+        self._ensure_device_container(container)
+        return container
+
+    def _device_index(self, device, container=None):
+        if container is None:
+            try:
+                container = self._device_container(device)
+            except Exception:
+                return -1
+        for index, candidate in enumerate(container.devices):
+            if candidate == device:
+                return index
+        return -1
+
+    def _device_at(self, container, index):
+        devices = list(container.devices)
+        if not devices:
+            raise ValueError("Target has no devices")
+        index = self._clamp_int(index, 0, len(devices) - 1)
+        return devices[index]
+
+    def _device_identity_set(self, container):
+        return list(container.devices)
+
+    def _new_or_last_device(self, container, before):
+        devices = list(container.devices)
+        for device in devices:
+            if not any(device == candidate for candidate in before):
+                return device
+        if devices:
+            return devices[-1]
+        raise ValueError("Device was not added")
+
+    def _container_device_infos(self, container):
+        return [self._device_info(device, index) for index, device in enumerate(container.devices)]
+
+    def _reorder_container_devices(self, container, ordered_devices):
+        for index, device in enumerate(ordered_devices):
+            if self._device_index(device, container) != index:
+                self.song().move_device(device, container, index)
+
+    def _container_info(self, container):
+        info = {"type": type(container).__name__, "device_count": len(container.devices)}
+        name = self._safe_get(container, "name")
+        if name is not None:
+            info["name"] = name
+        if hasattr(container, "clip_slots") and hasattr(container, "mixer_device"):
+            info["kind"] = "track"
+            info["track_index"] = self._track_index(container)
+            info["path"] = self._track_path(container)
+        else:
+            info["kind"] = "chain"
+            info["path"] = self._chain_path(container)
+        return info
+
+    def _track_path(self, track):
+        kind = self._track_kind(track)
+        if kind == "master":
+            return "song.master_track"
+        if kind == "return":
+            return "song.return_tracks[%s]" % self._track_index(track)
+        return "song.tracks[%s]" % self._track_index(track)
+
+    def _chain_path(self, chain):
+        path = self._path_for_object(chain)
+        return path or ""
+
+    def _path_for_object(self, target):
+        for track in list(self.song().tracks) + list(self.song().return_tracks) + [self.song().master_track]:
+            track_path = self._track_path(track)
+            if target == track:
+                return track_path
+            found = self._path_for_object_in_devices(target, list(track.devices), track_path)
+            if found:
+                return found
+        return None
+
+    def _path_for_object_in_devices(self, target, devices, parent_path):
+        for index, device in enumerate(devices):
+            device_path = "%s.devices[%s]" % (parent_path, index)
+            if target == device:
+                return device_path
+            for chain_attr in ("chains", "return_chains"):
+                chains = self._safe_get(device, chain_attr)
+                if not self._is_indexable_vector(chains):
+                    continue
+                for chain_index, chain in enumerate(chains):
+                    chain_path = "%s.%s[%s]" % (device_path, chain_attr, chain_index)
+                    if target == chain:
+                        return chain_path
+                    found = self._path_for_object_in_devices(target, list(chain.devices), chain_path)
+                    if found:
+                        return found
+        return None
+
+    def _device_tree_devices(self, container, parent_path, depth):
+        devices = []
+        for index, device in enumerate(container.devices):
+            path = "%s.devices[%s]" % (parent_path, index)
+            info = self._device_info(device, index)
+            info["path"] = path
+            if depth > 0:
+                chains = self._device_tree_chains(device, path, depth - 1)
+                if chains:
+                    info["chains"] = chains
+            devices.append(info)
+        return devices
+
+    def _device_tree_chains(self, device, device_path, depth):
+        chains = []
+        for chain_attr in ("chains", "return_chains"):
+            chain_values = self._safe_get(device, chain_attr)
+            if not self._is_indexable_vector(chain_values):
+                continue
+            for index, chain in enumerate(chain_values):
+                path = "%s.%s[%s]" % (device_path, chain_attr, index)
+                chains.append({
+                    "kind": chain_attr,
+                    "index": index,
+                    "name": self._safe_get(chain, "name"),
+                    "path": path,
+                    "devices": self._device_tree_devices(chain, path, depth) if depth > 0 else [],
+                })
+        return chains
 
     def _resolve_device(self, track, identifier):
         devices = list(track.devices)
@@ -1844,7 +2275,14 @@ class CodexBridge(ControlSurface):
             "display_value": display_value,
             "is_enabled": getattr(parameter, "is_enabled", True),
             "is_quantized": getattr(parameter, "is_quantized", False),
+            "automation_state": self._safe_get(parameter, "automation_state"),
+            "state": self._safe_get(parameter, "state"),
+            "default_value": self._safe_get(parameter, "default_value"),
+            "original_name": self._safe_get(parameter, "original_name"),
         }
+        value_items = self._safe_get(parameter, "value_items")
+        if value_items is not None:
+            info["value_items"] = self._serialize(value_items)
         if index is not None:
             info["index"] = index
         return info
@@ -1876,6 +2314,8 @@ class CodexBridge(ControlSurface):
             return {"type": type(value).__name__, "item": self._browser_item_info(value)}
         if hasattr(value, "sample_time") and hasattr(value, "beat_time"):
             return self._warp_marker_info(value)
+        if hasattr(value, "insert_step") and hasattr(value, "value_at_time"):
+            return self._automation_envelope_info(value)
         if hasattr(value, "pitch") and hasattr(value, "start_time"):
             return self._note_info(value)
         return {"type": type(value).__name__, "summary": self._summary(value)}
