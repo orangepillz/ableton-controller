@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.build/
+codex-midi-ports
+data/
+audit/
