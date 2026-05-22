@@ -6,12 +6,68 @@ from __future__ import annotations
 import argparse
 import json
 import socket
+import subprocess
 import sys
+import time
 from typing import Any
 
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 37337
+DEFAULT_APP_NAME = "Ableton Live 12 Suite"
+
+
+LOCAL_COMMANDS = {"hotkey", "key-sequence", "type-text", "menu-search", "save"}
+MODIFIER_NAMES = {
+    "cmd": "command down",
+    "command": "command down",
+    "meta": "command down",
+    "option": "option down",
+    "opt": "option down",
+    "alt": "option down",
+    "shift": "shift down",
+    "control": "control down",
+    "ctrl": "control down",
+}
+KEY_CODES = {
+    "return": 36,
+    "enter": 36,
+    "tab": 48,
+    "space": 49,
+    "delete": 51,
+    "backspace": 51,
+    "escape": 53,
+    "esc": 53,
+    "left": 123,
+    "right": 124,
+    "down": 125,
+    "up": 126,
+    "home": 115,
+    "end": 119,
+    "pageup": 116,
+    "pagedown": 121,
+    "forwarddelete": 117,
+    "f1": 122,
+    "f2": 120,
+    "f3": 99,
+    "f4": 118,
+    "f5": 96,
+    "f6": 97,
+    "f7": 98,
+    "f8": 100,
+    "f9": 101,
+    "f10": 109,
+    "f11": 103,
+    "f12": 111,
+    "f13": 105,
+    "f14": 107,
+    "f15": 113,
+    "f16": 106,
+    "f17": 64,
+    "f18": 79,
+    "f19": 80,
+    "f20": 90,
+}
 
 
 def send(payload: dict[str, Any], host: str, port: int, timeout: float) -> dict[str, Any]:
@@ -73,6 +129,11 @@ def track_value(value: str) -> int | str:
         return value
 
 
+def add_app_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--app", default=DEFAULT_APP_NAME, help="macOS app name for local keyboard/menu commands.")
+    parser.add_argument("--delay", type=float, default=0.08, help="Delay after activating Live, in seconds.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Control Ableton Live through Codex_AI.")
     add_common(parser)
@@ -125,6 +186,27 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("continue", help="Continue playback.")
     sub.add_parser("undo", help="Undo in Live.")
     sub.add_parser("redo", help="Redo in Live.")
+
+    hotkey = sub.add_parser("hotkey", help="Send any keyboard shortcut to Ableton, e.g. cmd+s or shift+tab.")
+    add_app_arg(hotkey)
+    hotkey.add_argument("combo", help="Key combo using + separators, e.g. cmd+option+b, cmd+shift+r, f11, tab.")
+
+    key_sequence = sub.add_parser("key-sequence", help="Send multiple key combos in order.")
+    add_app_arg(key_sequence)
+    key_sequence.add_argument("combos", nargs="+", help="One or more combos accepted by `hotkey`.")
+    key_sequence.add_argument("--between", type=float, default=0.1, help="Delay between combos, in seconds.")
+
+    type_text = sub.add_parser("type-text", help="Type text into Ableton's focused field.")
+    add_app_arg(type_text)
+    type_text.add_argument("text")
+
+    menu_search = sub.add_parser("menu-search", help="Use macOS menu search to run a Live menu command by name.")
+    add_app_arg(menu_search)
+    menu_search.add_argument("query", help="Menu command to search, e.g. Export Audio/Video.")
+    menu_search.add_argument("--search-delay", type=float, default=0.35, help="Delay after typing the menu query.")
+
+    save = sub.add_parser("save", help="Save the current Live set via Cmd+S.")
+    add_app_arg(save)
 
     lom_get = sub.add_parser("lom-get", help="Read a Live Object Model path.")
     lom_get.add_argument("path")
@@ -377,6 +459,112 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
     raise SystemExit(f"Unknown command: {command}")
 
 
+def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
+    if args.command == "save":
+        run_hotkey(args.app, "cmd+s", args.delay)
+        return {"command": "save", "app": args.app, "hotkey": "cmd+s", "done": True}
+    if args.command == "hotkey":
+        run_hotkey(args.app, args.combo, args.delay)
+        return {"command": "hotkey", "app": args.app, "combo": args.combo, "done": True}
+    if args.command == "key-sequence":
+        for index, combo in enumerate(args.combos):
+            run_hotkey(args.app, combo, args.delay if index == 0 else 0.0)
+            if index < len(args.combos) - 1:
+                time.sleep(max(0.0, args.between))
+        return {"command": "key-sequence", "app": args.app, "combos": args.combos, "done": True}
+    if args.command == "type-text":
+        run_applescript(
+            [
+                'tell application %s to activate' % applescript_string(args.app),
+                "delay %.3f" % max(0.0, args.delay),
+                "tell application \"System Events\"",
+                "  keystroke %s" % applescript_string(args.text),
+                "end tell",
+            ]
+        )
+        return {"command": "type-text", "app": args.app, "characters": len(args.text), "done": True}
+    if args.command == "menu-search":
+        run_menu_search(args.app, args.query, args.delay, args.search_delay)
+        return {"command": "menu-search", "app": args.app, "query": args.query, "done": True}
+    raise SystemExit(f"Unknown local command: {args.command}")
+
+
+def run_hotkey(app: str, combo: str, activation_delay: float) -> None:
+    action = applescript_key_action(combo)
+    run_applescript(
+        [
+            'tell application %s to activate' % applescript_string(app),
+            "delay %.3f" % max(0.0, activation_delay),
+            "tell application \"System Events\"",
+            "  %s" % action,
+            "end tell",
+        ]
+    )
+
+
+def run_menu_search(app: str, query: str, activation_delay: float, search_delay: float) -> None:
+    run_applescript(
+        [
+            'tell application %s to activate' % applescript_string(app),
+            "delay %.3f" % max(0.0, activation_delay),
+            "tell application \"System Events\"",
+            "  keystroke \"/\" using {command down, shift down}",
+            "  delay 0.150",
+            "  keystroke %s" % applescript_string(query),
+            "  delay %.3f" % max(0.0, search_delay),
+            "  key code 125",
+            "  delay 0.050",
+            "  key code 36",
+            "end tell",
+        ]
+    )
+
+
+def applescript_key_action(combo: str) -> str:
+    key, modifiers = parse_combo(combo)
+    suffix = ""
+    if modifiers:
+        suffix = " using {%s}" % ", ".join(modifiers)
+    key_name = key.lower()
+    if key_name in KEY_CODES:
+        return "key code %d%s" % (KEY_CODES[key_name], suffix)
+    if len(key) == 1:
+        return "keystroke %s%s" % (applescript_string(key), suffix)
+    raise SystemExit("Unknown key %r. Use a single character, a function key, arrows, tab, return, escape, space, delete, home/end, or pageup/pagedown." % key)
+
+
+def parse_combo(combo: str) -> tuple[str, list[str]]:
+    parts = [part.strip().lower() for part in combo.split("+") if part.strip()]
+    if not parts:
+        raise SystemExit("Empty key combo.")
+    key = parts[-1]
+    modifiers = []
+    for part in parts[:-1]:
+        modifier = MODIFIER_NAMES.get(part)
+        if modifier is None:
+            raise SystemExit("Unknown modifier %r in combo %r." % (part, combo))
+        if modifier not in modifiers:
+            modifiers.append(modifier)
+    return key, modifiers
+
+
+def applescript_string(value: str) -> str:
+    return json.dumps(value)
+
+
+def run_applescript(lines: list[str]) -> None:
+    command = ["osascript"]
+    for line in lines:
+        command.extend(["-e", line])
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown osascript failure"
+        raise SystemExit(
+            "macOS keyboard/menu automation failed: %s\n"
+            "Grant Accessibility permission to the terminal/Codex app if macOS blocks System Events." % detail
+        )
+
+
 def scalar_value(value: str) -> Any:
     lowered = value.lower()
     if lowered in {"true", "false"}:
@@ -394,6 +582,9 @@ def scalar_value(value: str) -> Any:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command in LOCAL_COMMANDS:
+        print_json(run_local_command(args))
+        return 0
     payload = command_payload(args)
     response = send(payload, args.host, args.port, args.timeout)
     print_json(response.get("result", response))

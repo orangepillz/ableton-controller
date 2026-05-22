@@ -96,6 +96,20 @@ python3 abletonctl.py focus-view Session
 python3 abletonctl.py hide-view Detail
 ```
 
+Send keyboard shortcuts and menu commands to Live:
+
+```sh
+python3 abletonctl.py hotkey cmd+s
+python3 abletonctl.py hotkey cmd+shift+r
+python3 abletonctl.py key-sequence cmd+option+b tab space
+python3 abletonctl.py type-text "My Set Name"
+python3 abletonctl.py menu-search "Export Audio/Video"
+python3 abletonctl.py save
+```
+
+These local keyboard/menu commands use macOS `osascript` and `System Events`, so macOS may require
+Accessibility permission for the terminal or Codex app that launches them.
+
 Create scenes/tracks and work with Session clips:
 
 ```sh

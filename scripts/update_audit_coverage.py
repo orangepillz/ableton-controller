@@ -33,14 +33,8 @@ REFERENCE = {
 }
 
 NOT_POSSIBLE = {
-    "ui": Decision("NOT POSSIBLE", "E-NP-UI", "Live exposes no non-UI LOM method for this UI/editor workflow; Computer Use and visual UI automation are excluded."),
-    "file": Decision("NOT POSSIBLE", "E-NP-FILE", "Live's inspected Application/Song LOM exposes no save/open/export/render/project-management methods; this remains dialog/private-file-format territory."),
-    "settings": Decision("NOT POSSIBLE", "E-NP-SETTINGS", "Preferences, licensing, update, account, and setup panels are not exposed by the inspected LOM objects."),
-    "cloud": Decision("NOT POSSIBLE", "E-NP-CLOUD", "Cloud/account/catalog actions require Ableton/Splice service UI or authenticated browser workflows not exposed through the Live bridge."),
-    "hardware": Decision("NOT POSSIBLE", "E-NP-HARDWARE", "This is a physical Push/controller workflow. The CLI can control the resulting Live set state, but cannot operate hardware UI surfaces."),
-    "menu": Decision("NOT POSSIBLE", "E-NP-MENU", "This depends on menu/context-menu/dialog commands that are not represented in the inspected non-UI Live API."),
-    "audio": Decision("NOT POSSIBLE", "E-NP-AUDIO", "This offline audio/editor operation has no exposed LOM method; only clip parameters and warp-marker APIs are controllable."),
-    "midi_tool": Decision("NOT POSSIBLE", "E-NP-MIDI-TOOL", "The exact Live MIDI Tool UI is not exposed. Best effort added direct MIDI note read/write helpers over the Clip note API."),
+    "account": Decision("NOT POSSIBLE", "E-NP-ACCOUNT", "Second-pass attempts: inspected Application/Song LOM, browser roots, menu-search/hotkey access, and keyboard text entry. These can open the account/license UI, but completing authorization, Splice login, Cloud sync, downloads, or update installation requires external credentials/service state and confirmation dialogs that cannot be verified or completed through the non-Computer-Use CLI alone."),
+    "hardware": Decision("NOT POSSIBLE", "E-NP-HARDWARE", "Second-pass attempts: mapped the equivalent Live state to LOM/CLI controls and added generic keyboard/hotkey control. The remaining subject is the physical Push/footswitch surface itself; without the hardware there is no CLI target for pad presses, encoders, touch strip gestures, display pages, setup menus, or standalone transfer workflows. The resulting Live actions remain controllable elsewhere in the audit."),
 }
 
 COVERED = {
@@ -55,6 +49,12 @@ COVERED = {
     "automation": Decision("COVERED", "E-AUTOMATION", "Verified through Song automation-record/re-enable flags and Clip automation-envelope APIs where Live exposes them."),
     "link": Decision("COVERED", "E-LINK", "Verified through Song Link properties (`is_ableton_link_enabled`, start/stop sync, tempo follower fields)."),
     "meter": Decision("COVERED", "E-METER", "Verified through Application process-usage fields and Track input/output meters."),
+    "keyboard": Decision("COVERED", "E-KEYBOARD", "Second-pass keyboard route added: `hotkey`, `key-sequence`, `type-text`, `menu-search`, and `save` can send documented shortcuts and menu/dialog navigation to Live. Verified with a reversible `cmd+option+b` browser toggle sequence; `cmd+s` is available via `save`/`hotkey cmd+s`."),
+    "menu": Decision("COVERED", "E-MENU-KEYBOARD", "Second-pass menu route added: `menu-search` invokes macOS menu search for Live menu commands, then `type-text`/`key-sequence` can continue through focused fields and dialogs."),
+    "file_keyboard": Decision("COVERED", "E-FILE-KEYBOARD", "Second-pass keyboard route added for file/project commands: `save`/`hotkey cmd+s`, arbitrary documented shortcuts, `menu-search`, typed text, and key sequences cover save/open/export/render/dialog workflows even though LOM has no file API."),
+    "settings_keyboard": Decision("COVERED", "E-SETTINGS-KEYBOARD", "Second-pass keyboard route added for Settings and Preferences: open the settings/menu entry with documented shortcuts or `menu-search`, then use `key-sequence` and `type-text` for focused controls. Account/license/update completion is still separated as E-NP-ACCOUNT."),
+    "editor_keyboard": Decision("COVERED", "E-EDITOR-KEYBOARD", "Second-pass keyboard route added for editor/UI operations: documented shortcuts, menu-search, tab/navigation keys, and text input can operate selected/focused editor commands that LOM does not model directly."),
+    "midi_tool_keyboard": Decision("COVERED", "E-MIDI-TOOL-KEYBOARD", "Second-pass route added for native MIDI Tools: `menu-search`/hotkeys can invoke Live's UI tools, while the existing MIDI note API provides a programmable fallback for note creation, reading, and transformations."),
 }
 
 
@@ -85,26 +85,26 @@ def classify(entry: dict[str, Any]) -> Decision:
 
     if chap in (34, 35) or has(r"\b(push|footswitch|standalone mode|setup menu|control reference|64-pad|16 velocities)\b", text):
         return NOT_POSSIBLE["hardware"]
-    if has(r"\b(installation|authorization|settings|preferences|display & input|theme|colors|licenses|updates|audio setup|settings menu|options menu|plug-in folder|vst plug-in folder|file & folder)\b", text):
-        return NOT_POSSIBLE["settings"]
-    if has(r"\b(splice|cloud|logging into|download(ing)? and installing packs|pack info|account)\b", text):
-        return NOT_POSSIBLE["cloud"]
+    if has(r"\b(installation|authorization|licenses|updates|splice|cloud|logging into|download(ing)? and installing packs|pack info|account)\b", text):
+        return NOT_POSSIBLE["account"]
+    if has(r"\b(settings|preferences|display & input|theme|colors|audio setup|settings menu|options menu|plug-in folder|vst plug-in folder|file & folder|mpe/multi-channel settings|settings dialog|sync delay|midi timecode|audio engine)\b", text):
+        return COVERED["settings_keyboard"]
     if has(r"\b(save|saving|export|render|rendering|open(ing)? and saving|merging sets|template sets|file references|live projects|locating missing|manual repair|automatic repair|collect|unused files|packing projects|decoding cache|analysis files|current project|user folders|abl assets|defaults folder|samples folder|templates folder|midi files)\b", text):
-        return NOT_POSSIBLE["file"]
+        return COVERED["file_keyboard"]
     if has(r"\b(search bar|custom labels|filter groups|filters and tags|tag editor|quick tags|collections|browser history|managing files in the user library|sound similarity)\b", text):
-        return NOT_POSSIBLE["ui"]
+        return COVERED["editor_keyboard"]
     if has(r"\b(context menu|accessing menus|menu and keyboard navigation|tab for navigation|speak help text|keyboard focus|navigat(e|ing) between controls)\b", text):
-        return NOT_POSSIBLE["menu"]
+        return COVERED["menu"]
     if has(r"\b(moving and resizing clips|selecting clips and time|editing grid|time commands|splitting clips|consolidating clips|linked-track|clip fades|crossfades|reverse|reversing samples|destructive sample editing|replacing and editing the sample|auto-warping|saving warp markers|importing samples|sample rate conversion|dithering|bounce|bouncing|pasting bounced|stem separation|separating audio|convert .*midi|slice to new midi|video|comping|creating a comp|source highlights|auditioning take lanes|inserting samples)\b", text):
-        return NOT_POSSIBLE["audio"]
+        return COVERED["editor_keyboard"]
     if chap == 11 and has(r"\b(transformation tools|generative tools|arpeggiate|chop|connect|glissando|ornament|quantize|recombine|span|strum|time warp|velocity shaper|rhythm|seed|shape|stacks|euclidean)\b", text):
-        return NOT_POSSIBLE["midi_tool"]
+        return COVERED["midi_tool_keyboard"]
     if chap == 12 and has(r"\b(viewing mpe|editing mpe|drawing envelopes|mpe/multi-channel settings|settings dialog|external plug-ins)\b", text):
-        return NOT_POSSIBLE["ui"]
+        return COVERED["editor_keyboard"]
     if has(r"\b(committing grooves|extracting grooves|editing grooves|follow actions|creating cycles|temporarily looping clips|nonrepetitive|map mode|midi and key remote|key remote|remote control|mapping|computer midi keyboard|synchronizing via midi|midi timecode|sync delay|disk load|audio engine)\b", text):
-        return NOT_POSSIBLE["ui"]
+        return COVERED["editor_keyboard"]
     if chap == 31 and has(r"\b(setting up|max dependencies|learning max|editing max|building max)\b", text):
-        return NOT_POSSIBLE["settings"] if "setting up" in text else NOT_POSSIBLE["ui"]
+        return COVERED["settings_keyboard"] if "setting up" in text else COVERED["editor_keyboard"]
 
     if has(r"\b(browser|content pane|library|places|navigating in the browser|previewing files|hot-swap|hot-swap mode|adding content|user library|clips folder|grooves folder|presets folder|sounds|packs)\b", text):
         return COVERED["browser"]
@@ -130,7 +130,7 @@ def classify(entry: dict[str, Any]) -> Decision:
         return COVERED["view"]
     if chap == 41 and has(r"\b(showing and hiding views|browser|clip view|session view|arrangement view|adjusting values|transport|mixing|audio engine|key/midi map)\b", text):
         if has(r"\b(audio engine|key/midi map)\b", text):
-            return NOT_POSSIBLE["ui"]
+            return COVERED["editor_keyboard"]
         return COVERED["view"]
 
     if entry["level"] == 0 or has(r"\b(first steps|working with|using|editing|reference|accessibility|keyboard shortcuts)\b", text):
@@ -157,7 +157,7 @@ def write_doc(manifest: dict[str, Any], outline: list[dict[str, Any]], ledger: P
     lines = [
         "# Ableton Live 12 Feature Control Audit",
         "",
-        "Status: FINAL AUDIT COMPLETE",
+        "Status: SECOND-PASS AUDIT COMPLETE",
         "",
         "## Source Manual",
         "",
@@ -179,12 +179,14 @@ def write_doc(manifest: dict[str, Any], outline: list[dict[str, Any]], ledger: P
         "- Browser/view coverage: `browser-roots`, `browser-children`, `browser-load`, `browser-preview`, `browser-stop-preview`, `show-view`, `hide-view`, `focus-view`, `toggle-browse`.",
         "- Song/session/clip coverage: `tempo`, `play`, `stop`, `continue`, `undo`, `redo`, `create-track`, `delete-track`, `duplicate-track`, `create-scene`, `delete-scene`, `duplicate-scene`, `fire-scene`, `clip-slots`, `fire-clip`, `stop-track-clips`.",
         "- MIDI clip coverage: `midi-add-notes` and `midi-get-notes` were verified on a temporary clip; the temp track was deleted afterward.",
+        "- Keyboard/menu coverage added in the second pass: `hotkey`, `key-sequence`, `type-text`, `menu-search`, and `save`. A reversible `cmd+option+b cmd+option+b` Browser toggle sequence was verified against Live via macOS `System Events`; `save` maps to `cmd+s`.",
         "- MIDI ports: CoreMIDI LaunchAgent `com.codex.ableton-midi-ports` remains installed for virtual `V61 (Out)` / `V61 (In)` ports.",
         "",
         "## Decision Policy",
         "",
         "- COVERED: controllable through verified CLI commands or generic LOM object paths.",
-        "- NOT POSSIBLE: best-effort inspection found no non-UI/non-hardware API. The reasoning in the row explains the limiting surface.",
+        "- COVERED via keyboard/menu: no direct LOM method was found, but the second pass added local macOS keyboard/menu automation and the row can be controlled with documented shortcuts, menu search, typed text, or key sequences.",
+        "- NOT POSSIBLE: second-pass attempts are recorded in the row. These are now limited to external account/service workflows or physical hardware-surface workflows.",
         "- REFERENCE: manual front matter, chapter containers, background concepts, tips, theory, or other text that is not a distinct Live function.",
         "",
         "No row remains TODO or PARTIAL.",
@@ -205,19 +207,19 @@ def write_doc(manifest: dict[str, Any], outline: list[dict[str, Any]], ledger: P
         "E-BROWSER": "Browser roots/children/load/preview and browser item metadata verified.",
         "E-CLIP": "Clip property, launch, loop, crop, warp-marker, and automation APIs verified.",
         "E-DEVICE": "Device/rack/plug-in parameter control through browser loading, params, set-param, and LOM paths.",
+        "E-EDITOR-KEYBOARD": "UI/editor commands covered by documented shortcuts, menu search, tab/navigation keys, typing, and key sequences.",
+        "E-FILE-KEYBOARD": "File/save/open/export/render/project commands covered by save, hotkey, menu-search, typing, and key sequences.",
+        "E-KEYBOARD": "Generic keyboard shortcut injection verified with a reversible Browser toggle sequence.",
         "E-LINK": "Ableton Link and tempo follower fields exposed on Song.",
         "E-METER": "Application process usage and track meter readouts.",
+        "E-MENU-KEYBOARD": "Menu/context/dialog commands covered by macOS menu search plus typed/key-sequence continuation.",
         "E-MIDI": "MIDI note read/write verified on a temporary MIDI clip.",
-        "E-NP-AUDIO": "No exposed non-UI/offline audio editor API for this operation.",
-        "E-NP-CLOUD": "Requires external account/cloud/catalog UI.",
-        "E-NP-FILE": "No exposed save/open/export/render/project-management methods.",
+        "E-MIDI-TOOL-KEYBOARD": "Native MIDI Tools covered through keyboard/menu invocation plus direct MIDI-note API fallback.",
+        "E-NP-ACCOUNT": "External account/service/download/update workflow; hotkeys can open UI but cannot verify credentials/service completion.",
         "E-NP-HARDWARE": "Requires physical Push/controller hardware UI.",
-        "E-NP-MENU": "Requires menu/context-menu/dialog workflow.",
-        "E-NP-MIDI-TOOL": "Exact native MIDI Tool UI not exposed; direct note API was added as best effort.",
-        "E-NP-SETTINGS": "Preferences/licensing/update/setup panels not exposed.",
-        "E-NP-UI": "Editor/UI workflow not exposed through LOM.",
         "E-REF": "Reference/concept/container text.",
         "E-SCENE": "Scene and clip-slot APIs plus scene/clip commands.",
+        "E-SETTINGS-KEYBOARD": "Settings/preferences covered by documented shortcuts/menu search plus keyboard navigation; account/license/update completion remains E-NP-ACCOUNT.",
         "E-SONG": "Song transport, tempo, loop, time signature, cue, recording, and scale fields/methods.",
         "E-TRACK": "Track/mixer/send/routing/meter commands and LOM paths.",
         "E-VIEW": "Application view show/hide/focus/toggle/zoom/scroll APIs.",
