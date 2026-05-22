@@ -170,6 +170,10 @@ class CodexBridge(ControlSurface):
             return self._browser_roots()
         if command == "browser_children":
             return self._browser_children(payload)
+        if command == "browser_tree":
+            return self._browser_tree(payload)
+        if command == "browser_search":
+            return self._browser_search(payload)
         if command == "browser_load":
             return self._browser_item_action(payload, "load")
         if command == "browser_preview":
@@ -216,6 +220,32 @@ class CodexBridge(ControlSurface):
             return self._midi_get_notes(payload)
         if command == "midi_add_notes":
             return self._midi_add_notes(payload)
+        if command == "midi_replace_notes":
+            return self._midi_replace_notes(payload)
+        if command == "midi_update_notes":
+            return self._midi_update_notes(payload)
+        if command == "midi_remove_notes":
+            return self._midi_remove_notes(payload)
+        if command == "midi_clear_notes":
+            return self._midi_clear_notes(payload)
+        if command == "midi_transform_notes":
+            return self._midi_transform_notes(payload)
+        if command == "midi_duplicate_region":
+            return self._midi_duplicate_region(payload)
+        if command == "clips":
+            return self._clips(payload)
+        if command == "clip_create_midi":
+            return self._clip_create_midi(payload)
+        if command == "clip_set":
+            return self._clip_set(payload)
+        if command == "clip_delete":
+            return self._clip_delete(payload)
+        if command == "clip_copy":
+            return self._clip_copy_or_move(payload, False)
+        if command == "clip_move":
+            return self._clip_copy_or_move(payload, True)
+        if command == "clip_split":
+            return self._clip_split(payload)
         if command == "clip_slots":
             return self._clip_slots(payload)
         if command == "fire_clip":
@@ -309,11 +339,158 @@ class CodexBridge(ControlSurface):
     def _fire_clip(self, payload):
         track = self._resolve_track(payload.get("track"))
         slot_index = int(payload.get("slot", 0))
-        slots = list(track.clip_slots)
-        if slot_index < 0 or slot_index >= len(slots):
-            raise ValueError("Clip slot index out of range: %s" % slot_index)
-        slots[slot_index].fire()
+        slot = self._resolve_clip_slot(track, slot_index)
+        slot.fire()
         return {"track": track.name, "slot": slot_index, "done": True}
+
+    def _clips(self, payload):
+        track = self._resolve_track(payload.get("track"))
+        arrangement = []
+        for index, clip in enumerate(track.arrangement_clips):
+            arrangement.append({"index": index, "clip": self._clip_info(clip)})
+        slots = []
+        for index, slot in enumerate(track.clip_slots):
+            info = {
+                "index": index,
+                "has_clip": slot.has_clip,
+                "is_playing": slot.is_playing,
+                "is_recording": slot.is_recording,
+                "will_record_on_start": slot.will_record_on_start,
+            }
+            if slot.has_clip:
+                info["clip"] = self._clip_info(slot.clip)
+            slots.append(info)
+        return {"track": track.name, "arrangement_clips": arrangement, "clip_slots": slots}
+
+    def _clip_create_midi(self, payload):
+        track = self._resolve_track(payload.get("track"))
+        self._ensure_midi_track(track)
+        name = payload.get("name")
+        color = payload.get("color")
+        color_index = payload.get("color_index")
+        if "slot" in payload:
+            slot_index = int(payload.get("slot"))
+            slot = self._resolve_clip_slot(track, slot_index)
+            if slot.has_clip:
+                if payload.get("replace", False):
+                    slot.delete_clip()
+                else:
+                    raise ValueError("Clip slot %s on %s already has a clip" % (slot_index, track.name))
+            length = self._clip_length_from_payload(payload, None)
+            slot.create_clip(length)
+            clip = slot.clip
+            location = {"kind": "session", "track": track.name, "slot": slot_index}
+        else:
+            start, length = self._arrangement_range_from_payload(payload, 0.0, 4.0)
+            clip = track.create_midi_clip(start, length)
+            if clip is None:
+                clip = self._find_arrangement_clip(track, start, length)
+            location = {"kind": "arrangement", "track": track.name, "start": start, "length": length}
+        self._set_optional_clip_property(clip, "name", name)
+        self._set_optional_clip_property(clip, "color", color)
+        self._set_optional_clip_property(clip, "color_index", color_index)
+        try:
+            self.song().view.selected_track = track
+            self.song().view.detail_clip = clip
+        except Exception:
+            pass
+        return {"location": location, "clip": self._clip_info(clip)}
+
+    def _clip_set(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        clip = ref["clip"]
+        changed = {}
+        for key, attr in (
+            ("name", "name"),
+            ("color", "color"),
+            ("color_index", "color_index"),
+            ("muted", "muted"),
+            ("looping", "looping"),
+            ("launch_mode", "launch_mode"),
+            ("launch_quantization", "launch_quantization"),
+            ("legato", "legato"),
+            ("velocity_amount", "velocity_amount"),
+            ("signature_numerator", "signature_numerator"),
+            ("signature_denominator", "signature_denominator"),
+            ("position", "position"),
+            ("loop_start", "loop_start"),
+            ("loop_end", "loop_end"),
+            ("start_marker", "start_marker"),
+            ("end_marker", "end_marker"),
+        ):
+            if key in payload:
+                setattr(clip, attr, payload[key])
+                changed[attr] = self._safe_get(clip, attr)
+        return {"location": self._clip_ref_info(ref), "changed": changed, "clip": self._clip_info(clip)}
+
+    def _clip_delete(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        info = self._clip_info(ref["clip"])
+        location = self._clip_ref_info(ref)
+        self._delete_clip_ref(ref)
+        return {"location": location, "deleted_clip": info, "done": True}
+
+    def _clip_copy_or_move(self, payload, move):
+        source = self._resolve_clip_ref(payload, "source")
+        source_clip = source["clip"]
+        if not self._safe_get(source_clip, "is_midi_clip", False):
+            raise ValueError("Only MIDI clip copy/move is implemented")
+        source_info = self._clip_ref_info(source)
+        target = self._create_midi_clip_destination(payload, source)
+        self._copy_midi_clip_contents(source_clip, target["clip"])
+        if move:
+            self._delete_clip_ref(source)
+        return {
+            "source": source_info,
+            "target": self._clip_ref_info(target),
+            "clip": self._clip_info(target["clip"]),
+            "moved": move,
+            "done": True,
+        }
+
+    def _clip_split(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        clip = ref["clip"]
+        if not self._safe_get(clip, "is_midi_clip", False):
+            raise ValueError("Only MIDI clips can be split by this command")
+        if not self._safe_get(clip, "is_arrangement_clip", False):
+            raise ValueError("clip-split currently supports Arrangement clips; copy Session clips to slots first")
+        track = ref.get("track")
+        if track is None:
+            raise ValueError("Could not resolve Arrangement clip track")
+        split_time = float(payload.get("time"))
+        relative = bool(payload.get("relative", False))
+        clip_start = float(self._safe_get(clip, "start_time", 0.0))
+        clip_length = float(self._safe_get(clip, "length", 0.0))
+        split_offset = split_time if relative else split_time - clip_start
+        if split_offset <= 0.0 or split_offset >= clip_length:
+            raise ValueError("Split time must be inside the clip range")
+        original_info = self._clip_info(clip)
+        original_name = self._safe_get(clip, "name", "")
+        source_info = self._clip_ref_info(ref)
+        notes = self._midi_note_dicts(clip)
+        left_notes, right_notes = self._split_note_dicts(notes, split_offset)
+        self._delete_clip_ref(ref)
+        left = track.create_midi_clip(clip_start, split_offset)
+        if left is None:
+            left = self._find_arrangement_clip(track, clip_start, split_offset)
+        right_start = clip_start + split_offset
+        right_length = clip_length - split_offset
+        right = track.create_midi_clip(right_start, right_length)
+        if right is None:
+            right = self._find_arrangement_clip(track, right_start, right_length)
+        self._apply_clip_look(original_info, left, original_name)
+        self._apply_clip_look(original_info, right, (original_name + " Split").strip())
+        self._add_note_dicts(left, left_notes)
+        self._add_note_dicts(right, right_notes)
+        return {
+            "source": source_info,
+            "split_time": split_time,
+            "split_offset": split_offset,
+            "left": self._clip_info(left),
+            "right": self._clip_info(right),
+            "done": True,
+        }
 
     def _view_command(self, payload):
         action = str(payload.get("action", "show"))
@@ -349,11 +526,109 @@ class CodexBridge(ControlSurface):
 
     def _browser_children(self, payload):
         item = self._resolve_browser_item(payload.get("item"))
-        children = list(item.children) if self._is_indexable_vector(item.children) else []
+        children = self._browser_item_children(item)
         return {
             "item": self._browser_item_info(item),
             "children": [{"path": self._browser_child_path(payload.get("item"), child), "item": self._browser_item_info(child)} for child in children],
         }
+
+    def _browser_tree(self, payload):
+        depth = max(0, int(payload.get("depth", 2)))
+        max_items = max(1, int(payload.get("max_items", 500)))
+        state = {"seen": 0, "truncated": False}
+        identifier = payload.get("item")
+        if identifier:
+            item = self._resolve_browser_item(identifier)
+            root = self._browser_tree_node(item, str(identifier).strip(), depth, state, max_items)
+            roots = [root]
+        else:
+            roots = []
+            for name in self._browser_root_names():
+                if state["seen"] >= max_items:
+                    state["truncated"] = True
+                    break
+                item = getattr(self.application().browser, name)
+                roots.append(self._browser_tree_node(item, name, depth, state, max_items))
+        return {
+            "roots": roots,
+            "depth": depth,
+            "items_seen": state["seen"],
+            "max_items": max_items,
+            "truncated": state["truncated"],
+        }
+
+    def _browser_tree_node(self, item, path, depth, state, max_items):
+        state["seen"] += 1
+        node = {"path": path, "item": self._browser_item_info(item)}
+        if depth <= 0 or state["seen"] >= max_items:
+            if depth > 0 and self._browser_children_count(item) > 0:
+                state["truncated"] = True
+            return node
+        children = []
+        for child in self._browser_item_children(item):
+            if state["seen"] >= max_items:
+                state["truncated"] = True
+                break
+            child_path = self._browser_child_path(path, child)
+            children.append(self._browser_tree_node(child, child_path, depth - 1, state, max_items))
+        if children:
+            node["children"] = children
+        return node
+
+    def _browser_search(self, payload):
+        query = payload.get("query")
+        needle = self._normalize_name(query or "")
+        if not needle:
+            raise ValueError("query is required")
+        depth = max(0, int(payload.get("depth", 6)))
+        max_results = max(1, int(payload.get("max_results", 100)))
+        max_items = max(1, int(payload.get("max_items", 5000)))
+        state = {"seen": 0, "truncated": False, "results": []}
+        identifier = payload.get("item")
+        if identifier:
+            item = self._resolve_browser_item(identifier)
+            self._browser_search_node(item, str(identifier).strip(), needle, depth, state, max_results, max_items)
+        else:
+            for name in self._browser_root_names():
+                if state["seen"] >= max_items or len(state["results"]) >= max_results:
+                    state["truncated"] = True
+                    break
+                item = getattr(self.application().browser, name)
+                self._browser_search_node(item, name, needle, depth, state, max_results, max_items)
+        return {
+            "query": query,
+            "results": state["results"],
+            "result_count": len(state["results"]),
+            "items_seen": state["seen"],
+            "max_items": max_items,
+            "max_results": max_results,
+            "depth": depth,
+            "truncated": state["truncated"],
+        }
+
+    def _browser_search_node(self, item, path, needle, depth, state, max_results, max_items):
+        if state["seen"] >= max_items or len(state["results"]) >= max_results:
+            state["truncated"] = True
+            return
+        state["seen"] += 1
+        haystack = self._normalize_name("%s %s %s %s" % (
+            self._safe_get(item, "name", ""),
+            self._safe_get(item, "source", ""),
+            self._safe_get(item, "uri", ""),
+            path,
+        ))
+        if needle in haystack:
+            state["results"].append({"path": path, "item": self._browser_item_info(item)})
+            if len(state["results"]) >= max_results:
+                state["truncated"] = True
+                return
+        if depth <= 0:
+            return
+        for child in self._browser_item_children(item):
+            self._browser_search_node(child, self._browser_child_path(path, child), needle, depth - 1, state, max_results, max_items)
+            if state["seen"] >= max_items or len(state["results"]) >= max_results:
+                state["truncated"] = True
+                break
 
     def _browser_item_action(self, payload, action):
         item = self._resolve_browser_item(payload.get("item"))
@@ -416,7 +691,7 @@ class CodexBridge(ControlSurface):
         normalized = self._normalize_name(name)
         matches = [
             child
-            for child in list(item.children)
+            for child in self._browser_item_children(item)
             if normalized in self._normalize_name(getattr(child, "name", ""))
         ]
         if len(matches) == 1:
@@ -430,12 +705,22 @@ class CodexBridge(ControlSurface):
             return child.name
         return "%s/%s" % (str(parent_identifier).rstrip("/"), child.name)
 
-    def _browser_item_info(self, item):
-        children_count = None
+    def _browser_item_children(self, item):
         try:
-            children_count = len(item.children)
+            children = item.children
         except Exception:
-            pass
+            return []
+        if self._is_indexable_vector(children):
+            return list(children)
+        return []
+
+    def _browser_children_count(self, item):
+        try:
+            return len(item.children)
+        except Exception:
+            return 0
+
+    def _browser_item_info(self, item):
         return {
             "name": self._safe_get(item, "name"),
             "uri": self._safe_get(item, "uri"),
@@ -444,7 +729,7 @@ class CodexBridge(ControlSurface):
             "is_folder": self._safe_get(item, "is_folder"),
             "is_loadable": self._safe_get(item, "is_loadable"),
             "is_selected": self._safe_get(item, "is_selected"),
-            "children_count": children_count,
+            "children_count": self._browser_children_count(item),
         }
 
     def _create_track(self, payload):
@@ -506,10 +791,14 @@ class CodexBridge(ControlSurface):
         clip = self._resolve_clip(payload)
         if not self._safe_get(clip, "is_midi_clip", False):
             raise ValueError("Clip is not a MIDI clip")
-        try:
-            notes = clip.get_all_notes_extended()
-        except TypeError:
-            notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
+        if self._has_note_region(payload):
+            from_pitch, pitch_span, from_time, time_span = self._midi_region_args(payload, clip)
+            notes = clip.get_notes_extended(from_pitch, pitch_span, from_time, time_span)
+        else:
+            try:
+                notes = clip.get_all_notes_extended()
+            except TypeError:
+                notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
         return {"clip": self._clip_info(clip), "notes": self._serialize(notes)}
 
     def _midi_add_notes(self, payload):
@@ -521,11 +810,121 @@ class CodexBridge(ControlSurface):
         notes = payload.get("notes", [])
         if not isinstance(notes, list):
             raise ValueError("notes must be a list")
-        specifications = tuple(self._midi_note_spec(note) for note in notes)
-        clip.add_new_notes(specifications)
+        self._add_note_dicts(clip, notes)
         return self._midi_get_notes(payload)
 
-    def _midi_note_spec(self, note):
+    def _midi_replace_notes(self, payload):
+        clip = self._resolve_clip(payload)
+        self._ensure_midi_clip(clip)
+        notes = payload.get("notes", [])
+        if not isinstance(notes, list):
+            raise ValueError("notes must be a list")
+        self._remove_notes_region(clip, 0, 128, 0.0, max(float(self._safe_get(clip, "length", 0.0)), 1576800.0))
+        self._add_note_dicts(clip, notes)
+        return self._midi_get_notes(payload)
+
+    def _midi_update_notes(self, payload):
+        clip = self._resolve_clip(payload)
+        self._ensure_midi_clip(clip)
+        updates = payload.get("notes", [])
+        if not isinstance(updates, list):
+            raise ValueError("notes must be a list")
+        existing = {}
+        for note in self._midi_note_dicts(clip):
+            note_id = note.get("note_id")
+            if note_id is not None:
+                existing[int(note_id)] = note
+        modified = []
+        for update in updates:
+            if not isinstance(update, dict) or "note_id" not in update:
+                raise ValueError("Each update note must include note_id")
+            note_id = int(update["note_id"])
+            if note_id not in existing:
+                raise ValueError("No note with note_id %s" % note_id)
+            data = dict(existing[note_id])
+            data.update(update)
+            modified.append(data)
+        if modified:
+            self._replace_notes_by_id(clip, modified)
+        return self._midi_get_notes(payload)
+
+    def _midi_remove_notes(self, payload):
+        clip = self._resolve_clip(payload)
+        self._ensure_midi_clip(clip)
+        ids = payload.get("note_ids")
+        if ids:
+            clip.remove_notes_by_id(tuple(int(note_id) for note_id in ids))
+        else:
+            from_pitch, pitch_span, from_time, time_span = self._midi_region_args(payload, clip)
+            self._remove_notes_region(clip, from_pitch, pitch_span, from_time, time_span)
+        return self._midi_get_notes(payload)
+
+    def _midi_clear_notes(self, payload):
+        clip = self._resolve_clip(payload)
+        self._ensure_midi_clip(clip)
+        if self._has_note_region(payload):
+            from_pitch, pitch_span, from_time, time_span = self._midi_region_args(payload, clip)
+        else:
+            from_pitch, pitch_span, from_time, time_span = (0, 128, 0.0, max(float(self._safe_get(clip, "length", 0.0)), 1576800.0))
+        self._remove_notes_region(clip, from_pitch, pitch_span, from_time, time_span)
+        return self._midi_get_notes(payload)
+
+    def _midi_transform_notes(self, payload):
+        clip = self._resolve_clip(payload)
+        self._ensure_midi_clip(clip)
+        notes = self._midi_note_dicts(clip, payload if self._has_note_region(payload) else None)
+        modified = []
+        transpose = int(payload.get("transpose", 0))
+        time_delta = float(payload.get("time_delta", 0.0))
+        duration_scale = float(payload.get("duration_scale", 1.0))
+        duration_delta = float(payload.get("duration_delta", 0.0))
+        velocity_scale = float(payload.get("velocity_scale", 1.0))
+        velocity_delta = float(payload.get("velocity_delta", 0.0))
+        for note in notes:
+            data = dict(note)
+            data["pitch"] = self._clamp_int(int(data.get("pitch", 0)) + transpose, 0, 127)
+            data["start_time"] = max(0.0, float(data.get("start_time", 0.0)) + time_delta)
+            data["duration"] = max(0.0001, float(data.get("duration", 0.0)) * duration_scale + duration_delta)
+            data["velocity"] = self._clamp_float(float(data.get("velocity", 100.0)) * velocity_scale + velocity_delta, 0.0, 127.0)
+            if "probability" in payload:
+                data["probability"] = self._clamp_float(float(payload["probability"]), 0.0, 1.0)
+            if "velocity_deviation" in payload:
+                data["velocity_deviation"] = self._clamp_float(float(payload["velocity_deviation"]), -127.0, 127.0)
+            if "release_velocity" in payload:
+                data["release_velocity"] = self._clamp_float(float(payload["release_velocity"]), 0.0, 127.0)
+            if "mute" in payload:
+                data["mute"] = bool(payload["mute"])
+            modified.append(data)
+        if modified:
+            self._replace_notes_by_id(clip, modified)
+        return self._midi_get_notes(payload)
+
+    def _midi_duplicate_region(self, payload):
+        clip = self._resolve_clip(payload)
+        self._ensure_midi_clip(clip)
+        region_start = float(payload.get("start", 0.0))
+        if "length" in payload:
+            region_length = float(payload.get("length"))
+        elif "end" in payload:
+            region_length = float(payload.get("end")) - region_start
+        else:
+            raise ValueError("midi-duplicate-region needs --length or --end")
+        destination_time = float(payload.get("destination_time"))
+        pitch = int(payload.get("pitch", -1))
+        transposition = int(payload.get("transpose", 0))
+        try:
+            clip.duplicate_region(region_start, region_length, destination_time, pitch, transposition)
+        except TypeError:
+            if pitch != -1 or transposition != 0:
+                clip.duplicate_region(region_start, region_length, destination_time, pitch, transposition)
+            else:
+                clip.duplicate_region(region_start, region_length, destination_time)
+        result_payload = dict(payload)
+        for key in ("start", "end", "length", "pitch_min", "pitch_max"):
+            result_payload.pop(key, None)
+        return self._midi_get_notes(result_payload)
+
+    def _midi_note_spec(self, note, include_note_id=False):
         if not isinstance(note, dict):
             raise ValueError("Each note must be an object")
         data = {
@@ -538,6 +937,8 @@ class CodexBridge(ControlSurface):
             "velocity_deviation": float(note.get("velocity_deviation", 0.0)),
             "release_velocity": float(note.get("release_velocity", 64.0)),
         }
+        if include_note_id and "note_id" in note:
+            data["note_id"] = int(note["note_id"])
         spec_class = Live.Clip.MidiNoteSpecification
         try:
             return spec_class(**data)
@@ -548,18 +949,292 @@ class CodexBridge(ControlSurface):
             return spec
 
     def _resolve_clip(self, payload):
-        if payload.get("path"):
-            clip = self._resolve_lom_path(payload.get("path"))
+        return self._resolve_clip_ref(payload)["clip"]
+
+    def _ensure_midi_track(self, track):
+        if not self._safe_get(track, "has_midi_input", False):
+            raise ValueError("Track %s is not a MIDI track" % track.name)
+
+    def _ensure_midi_clip(self, clip):
+        if not self._safe_get(clip, "is_midi_clip", False):
+            raise ValueError("Clip is not a MIDI clip")
+
+    def _resolve_clip_slot(self, track, slot_index):
+        slots = list(track.clip_slots)
+        if slot_index < 0 or slot_index >= len(slots):
+            raise ValueError("Clip slot index out of range: %s" % slot_index)
+        return slots[slot_index]
+
+    def _resolve_clip_ref(self, payload, prefix=""):
+        path = self._prefixed(payload, prefix, "path")
+        if path:
+            clip = self._resolve_lom_path(path)
+            if not hasattr(clip, "is_audio_clip") and not hasattr(clip, "is_midi_clip"):
+                raise ValueError("Path did not resolve to a clip")
+            return self._clip_ref_from_clip(clip)
+
+        track = self._resolve_track(self._prefixed(payload, prefix, "track"))
+        arrangement_index = self._prefixed(payload, prefix, "arrangement_index", None)
+        if arrangement_index is not None:
+            clips = list(track.arrangement_clips)
+            index = int(arrangement_index)
+            if index < 0 or index >= len(clips):
+                raise ValueError("Arrangement clip index out of range: %s" % index)
+            return {"kind": "arrangement", "track": track, "arrangement_index": index, "clip": clips[index]}
+
+        arrangement_start = self._prefixed(payload, prefix, "arrangement_start", None)
+        if arrangement_start is not None:
+            clip = self._find_arrangement_clip_at(track, float(arrangement_start))
+            return self._clip_ref_from_clip(clip)
+
+        slot_index = int(self._prefixed(payload, prefix, "slot", 0))
+        slot = self._resolve_clip_slot(track, slot_index)
+        if not slot.has_clip:
+            raise ValueError("Clip slot %s on %s has no clip" % (slot_index, track.name))
+        return {"kind": "session", "track": track, "slot": slot, "slot_index": slot_index, "clip": slot.clip}
+
+    def _clip_ref_from_clip(self, clip):
+        ref = {"kind": "path", "clip": clip}
+        try:
+            if self._safe_get(clip, "is_session_clip", False):
+                slot = clip.canonical_parent
+                track = slot.canonical_parent
+                ref.update({"kind": "session", "track": track, "slot": slot, "slot_index": self._slot_index(track, slot)})
+            elif self._safe_get(clip, "is_arrangement_clip", False):
+                track = clip.canonical_parent
+                ref.update({"kind": "arrangement", "track": track, "arrangement_index": self._arrangement_clip_index(track, clip)})
+        except Exception:
+            pass
+        return ref
+
+    def _delete_clip_ref(self, ref):
+        if ref.get("kind") == "session" and ref.get("slot") is not None:
+            ref["slot"].delete_clip()
+            return
+        track = ref.get("track")
+        if track is None:
+            track = ref["clip"].canonical_parent
+        track.delete_clip(ref["clip"])
+
+    def _clip_ref_info(self, ref):
+        info = {"kind": ref.get("kind")}
+        track = ref.get("track")
+        if track is not None:
+            info["track"] = track.name
+            info["track_index"] = self._track_index(track)
+        if "slot_index" in ref:
+            info["slot"] = ref["slot_index"]
+        if "arrangement_index" in ref:
+            info["arrangement_index"] = ref["arrangement_index"]
+        clip = ref.get("clip")
+        if clip is not None:
+            if self._safe_get(clip, "is_arrangement_clip", False):
+                info["start_time"] = self._safe_get(clip, "start_time")
+                info["end_time"] = self._safe_get(clip, "end_time")
+            info["clip"] = self._clip_info(clip)
+        return info
+
+    def _prefixed(self, payload, prefix, key, default=None):
+        if prefix:
+            return payload.get("%s_%s" % (prefix, key), default)
+        return payload.get(key, default)
+
+    def _clip_length_from_payload(self, payload, fallback):
+        if payload.get("from_loop", False):
+            return float(self.song().loop_length)
+        if "length" in payload:
+            return float(payload.get("length"))
+        if "end" in payload:
+            start = float(payload.get("start", 0.0))
+            return float(payload.get("end")) - start
+        if fallback is not None:
+            return float(fallback)
+        return 4.0
+
+    def _arrangement_range_from_payload(self, payload, fallback_start, fallback_length):
+        if payload.get("from_loop", False):
+            start = float(self.song().loop_start)
+            length = float(self.song().loop_length)
         else:
-            track = self._resolve_track(payload.get("track"))
-            slot_index = int(payload.get("slot", 0))
-            slot = list(track.clip_slots)[slot_index]
-            if not slot.has_clip:
-                raise ValueError("Clip slot %s on %s has no clip" % (slot_index, track.name))
-            clip = slot.clip
-        if not hasattr(clip, "is_audio_clip") and not hasattr(clip, "is_midi_clip"):
-            raise ValueError("Path did not resolve to a clip")
-        return clip
+            start = float(payload.get("start", fallback_start))
+            length = self._clip_length_from_payload(payload, fallback_length)
+        if "end" in payload:
+            end = float(payload.get("end"))
+            length = end - start
+        if length <= 0.0:
+            raise ValueError("Clip length must be greater than 0")
+        return start, length
+
+    def _create_midi_clip_destination(self, payload, source_ref):
+        source_clip = source_ref["clip"]
+        source_track = source_ref.get("track")
+        target_track = self._resolve_track(payload.get("dest_track", source_track.name if source_track is not None else None))
+        self._ensure_midi_track(target_track)
+        length = self._clip_length_from_payload(payload, self._safe_get(source_clip, "length", 4.0))
+        dest_slot = payload.get("dest_slot")
+        if dest_slot is not None:
+            slot_index = int(dest_slot)
+            slot = self._resolve_clip_slot(target_track, slot_index)
+            if slot.has_clip:
+                if payload.get("replace", False):
+                    slot.delete_clip()
+                else:
+                    raise ValueError("Destination clip slot %s on %s already has a clip" % (slot_index, target_track.name))
+            slot.create_clip(length)
+            return {"kind": "session", "track": target_track, "slot": slot, "slot_index": slot_index, "clip": slot.clip}
+
+        if payload.get("dest_from_loop", False):
+            start = float(self.song().loop_start)
+        elif "dest_start" in payload:
+            start = float(payload.get("dest_start"))
+        elif "start" in payload:
+            start = float(payload.get("start"))
+        else:
+            start = float(self._safe_get(source_clip, "start_time", 0.0))
+        if "dest_end" in payload:
+            length = float(payload.get("dest_end")) - start
+        if length <= 0.0:
+            raise ValueError("Destination clip length must be greater than 0")
+        clip = target_track.create_midi_clip(start, length)
+        if clip is None:
+            clip = self._find_arrangement_clip(target_track, start, length)
+        return self._clip_ref_from_clip(clip)
+
+    def _find_arrangement_clip(self, track, start, length):
+        target_end = start + length
+        for clip in track.arrangement_clips:
+            clip_start = float(self._safe_get(clip, "start_time", -1.0))
+            clip_end = float(self._safe_get(clip, "end_time", -1.0))
+            if abs(clip_start - start) < 0.0001 and abs(clip_end - target_end) < 0.0001:
+                return clip
+        raise ValueError("Could not find newly-created Arrangement clip")
+
+    def _find_arrangement_clip_at(self, track, start):
+        matches = []
+        for clip in track.arrangement_clips:
+            clip_start = float(self._safe_get(clip, "start_time", -1.0))
+            clip_end = float(self._safe_get(clip, "end_time", -1.0))
+            if abs(clip_start - start) < 0.0001 or (clip_start <= start < clip_end):
+                matches.append(clip)
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise ValueError("Arrangement time %s matches multiple clips" % start)
+        raise ValueError("No Arrangement clip at %s on %s" % (start, track.name))
+
+    def _slot_index(self, track, slot):
+        for index, candidate in enumerate(track.clip_slots):
+            if candidate == slot:
+                return index
+        return -1
+
+    def _arrangement_clip_index(self, track, clip):
+        for index, candidate in enumerate(track.arrangement_clips):
+            if candidate == clip:
+                return index
+        return -1
+
+    def _copy_midi_clip_contents(self, source, target):
+        self._apply_clip_look(self._clip_info(source), target, self._safe_get(source, "name", ""))
+        self._add_note_dicts(target, self._midi_note_dicts(source))
+
+    def _apply_clip_look(self, info, clip, name):
+        self._set_optional_clip_property(clip, "name", name)
+        self._set_optional_clip_property(clip, "color", info.get("color"))
+        self._set_optional_clip_property(clip, "color_index", info.get("color_index"))
+        self._set_optional_clip_property(clip, "muted", info.get("muted"))
+        self._set_optional_clip_property(clip, "looping", info.get("looping"))
+        self._set_optional_clip_property(clip, "signature_numerator", info.get("signature_numerator"))
+        self._set_optional_clip_property(clip, "signature_denominator", info.get("signature_denominator"))
+
+    def _set_optional_clip_property(self, clip, attr, value):
+        if value is None:
+            return
+        try:
+            setattr(clip, attr, value)
+        except Exception:
+            pass
+
+    def _add_note_dicts(self, clip, notes):
+        if not notes:
+            return
+        clip.add_new_notes(tuple(self._midi_note_spec(note) for note in notes))
+
+    def _replace_notes_by_id(self, clip, notes):
+        ids = [int(note["note_id"]) for note in notes if "note_id" in note]
+        if ids:
+            clip.remove_notes_by_id(tuple(ids))
+        self._add_note_dicts(clip, notes)
+
+    def _midi_note_dicts(self, clip, region_payload=None):
+        self._ensure_midi_clip(clip)
+        if region_payload is not None:
+            from_pitch, pitch_span, from_time, time_span = self._midi_region_args(region_payload, clip)
+            notes = clip.get_notes_extended(from_pitch, pitch_span, from_time, time_span)
+        else:
+            try:
+                notes = clip.get_all_notes_extended()
+            except TypeError:
+                notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
+        serialized = self._serialize(notes)
+        if isinstance(serialized, dict) and "items" in serialized:
+            return serialized["items"]
+        if isinstance(serialized, list):
+            return serialized
+        return []
+
+    def _remove_notes_region(self, clip, from_pitch, pitch_span, from_time, time_span):
+        try:
+            clip.remove_notes_extended(int(from_pitch), int(pitch_span), float(from_time), float(time_span))
+        except TypeError:
+            clip.remove_notes(float(from_time), int(from_pitch), float(time_span), int(pitch_span))
+
+    def _midi_region_args(self, payload, clip):
+        from_pitch = self._clamp_int(int(payload.get("pitch_min", 0)), 0, 127)
+        pitch_max = self._clamp_int(int(payload.get("pitch_max", 127)), from_pitch, 127)
+        pitch_span = pitch_max - from_pitch + 1
+        from_time = max(0.0, float(payload.get("start", 0.0)))
+        if "end" in payload:
+            time_span = float(payload.get("end")) - from_time
+        elif "length" in payload:
+            time_span = float(payload.get("length"))
+        else:
+            time_span = max(float(self._safe_get(clip, "length", 0.0)) - from_time, 0.0)
+        if time_span < 0.0:
+            raise ValueError("MIDI note region end must be after start")
+        return from_pitch, pitch_span, from_time, time_span
+
+    def _has_note_region(self, payload):
+        return any(key in payload for key in ("start", "end", "length", "pitch_min", "pitch_max"))
+
+    def _split_note_dicts(self, notes, split_offset):
+        left = []
+        right = []
+        for note in notes:
+            start = float(note.get("start_time", 0.0))
+            duration = float(note.get("duration", 0.0))
+            end = start + duration
+            if start < split_offset:
+                left_duration = min(end, split_offset) - start
+                if left_duration > 0.0001:
+                    data = dict(note)
+                    data["duration"] = left_duration
+                    left.append(data)
+            if end > split_offset:
+                right_start = max(start, split_offset) - split_offset
+                right_duration = end - max(start, split_offset)
+                if right_duration > 0.0001:
+                    data = dict(note)
+                    data["start_time"] = right_start
+                    data["duration"] = right_duration
+                    right.append(data)
+        return left, right
+
+    def _clamp_int(self, value, minimum, maximum):
+        return max(minimum, min(maximum, int(value)))
+
+    def _clamp_float(self, value, minimum, maximum):
+        return max(minimum, min(maximum, float(value)))
 
     def _status(self):
         song = self.song()
@@ -857,11 +1532,23 @@ class CodexBridge(ControlSurface):
             "color_index": self._safe_get(clip, "color_index"),
             "is_audio_clip": self._safe_get(clip, "is_audio_clip"),
             "is_midi_clip": self._safe_get(clip, "is_midi_clip"),
+            "is_session_clip": self._safe_get(clip, "is_session_clip"),
+            "is_arrangement_clip": self._safe_get(clip, "is_arrangement_clip"),
+            "length": self._safe_get(clip, "length"),
+            "start_time": self._safe_get(clip, "start_time"),
+            "end_time": self._safe_get(clip, "end_time"),
             "looping": self._safe_get(clip, "looping"),
             "loop_start": self._safe_get(clip, "loop_start"),
             "loop_end": self._safe_get(clip, "loop_end"),
             "start_marker": self._safe_get(clip, "start_marker"),
             "end_marker": self._safe_get(clip, "end_marker"),
+            "muted": self._safe_get(clip, "muted"),
+            "launch_mode": self._safe_get(clip, "launch_mode"),
+            "launch_quantization": self._safe_get(clip, "launch_quantization"),
+            "legato": self._safe_get(clip, "legato"),
+            "signature_numerator": self._safe_get(clip, "signature_numerator"),
+            "signature_denominator": self._safe_get(clip, "signature_denominator"),
+            "velocity_amount": self._safe_get(clip, "velocity_amount"),
             "gain": self._safe_get(clip, "gain"),
             "pitch_coarse": self._safe_get(clip, "pitch_coarse"),
             "pitch_fine": self._safe_get(clip, "pitch_fine"),
@@ -907,6 +1594,8 @@ class CodexBridge(ControlSurface):
     def _serialize(self, value):
         if value is None or isinstance(value, (bool, int, float, str)):
             return value
+        if isinstance(value, dict):
+            return {str(key): self._serialize(item) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
             return [self._serialize(item) for item in list(value)[:512]]
         if self._is_indexable_vector(value):

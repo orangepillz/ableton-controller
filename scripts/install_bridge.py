@@ -85,7 +85,25 @@ def show(args: argparse.Namespace) -> None:
 def restart_activate(args: argparse.Namespace) -> None:
     install(args)
     print(f"Requesting quit for {args.app_name}...")
-    subprocess.run(["osascript", "-e", f'tell application "{args.app_name}" to quit'], check=False)
+    try:
+        quit_result = subprocess.run(
+            ["osascript", "-e", f'tell application "{args.app_name}" to quit'],
+            check=False,
+            timeout=args.quit_request_timeout,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired:
+        raise SystemExit(
+            "Timed out requesting Live to quit. If Live is showing an unsaved-changes dialog, "
+            "handle it and run this command again."
+        )
+    if quit_result.returncode != 0:
+        detail = quit_result.stderr.strip() or quit_result.stdout.strip() or "unknown osascript error"
+        raise SystemExit(
+            "Live declined the quit request: %s\n"
+            "If Live is showing an unsaved-changes dialog, handle it and run this command again." % detail
+        )
     if not wait_for_live_to_quit(args.process_pattern, args.quit_timeout):
         raise SystemExit(
             "Live did not quit before the timeout. If Live is showing an unsaved-changes dialog, "
@@ -185,6 +203,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--process-pattern",
         default="/Applications/Ableton Live 12 Suite.app/Contents/MacOS/Live",
     )
+    restart_parser.add_argument("--quit-request-timeout", type=float, default=10.0)
     restart_parser.add_argument("--quit-timeout", type=float, default=90.0)
     restart_parser.set_defaults(func=restart_activate)
 

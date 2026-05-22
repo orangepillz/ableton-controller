@@ -129,6 +129,46 @@ def track_value(value: str) -> int | str:
         return value
 
 
+def json_arg(value: str) -> Any:
+    try:
+        return json.loads(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("invalid JSON: %s" % exc)
+
+
+def int_list_arg(value: str) -> list[int]:
+    if value.strip().startswith("["):
+        parsed = json_arg(value)
+        if not isinstance(parsed, list):
+            raise argparse.ArgumentTypeError("expected a JSON list of note IDs")
+        return [int(item) for item in parsed]
+    return [int(item.strip()) for item in value.split(",") if item.strip()]
+
+
+def add_clip_ref_args(parser: argparse.ArgumentParser, prefix: str = "") -> None:
+    flag = "--%s" if not prefix else "--%s-%%s" % prefix
+    parser.add_argument(flag % "path")
+    parser.add_argument(flag % "track", type=track_value)
+    parser.add_argument(flag % "slot", type=int)
+    parser.add_argument(flag % "arrangement-index", type=int)
+    parser.add_argument(flag % "arrangement-start", type=float)
+
+
+def add_note_region_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--start", type=float, help="Clip beat where the note region starts.")
+    parser.add_argument("--end", type=float, help="Clip beat where the note region ends.")
+    parser.add_argument("--length", type=float, help="Length of the note region in beats.")
+    parser.add_argument("--pitch-min", type=int)
+    parser.add_argument("--pitch-max", type=int)
+
+
+def add_clip_range_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--start", type=float, help="Arrangement beat where the clip starts.")
+    parser.add_argument("--end", type=float, help="Arrangement beat where the clip ends.")
+    parser.add_argument("--length", type=float, help="Clip length in beats.")
+    parser.add_argument("--from-loop", action="store_true", help="Use Live's current Arrangement loop start/length.")
+
+
 def add_app_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--app", default=DEFAULT_APP_NAME, help="macOS app name for local keyboard/menu commands.")
     parser.add_argument("--delay", type=float, default=0.08, help="Delay after activating Live, in seconds.")
@@ -240,6 +280,18 @@ def build_parser() -> argparse.ArgumentParser:
     browser_children = sub.add_parser("browser-children", help="List browser children by path, e.g. 'audio_effects/EQ Eight'.")
     browser_children.add_argument("item")
 
+    browser_tree = sub.add_parser("browser-tree", help="Read a recursive Live browser tree.")
+    browser_tree.add_argument("item", nargs="?", help="Optional root/path, e.g. instruments or 'audio_effects/EQ Eight'. Defaults to all roots.")
+    browser_tree.add_argument("--depth", type=int, default=2, help="How many child levels to read.")
+    browser_tree.add_argument("--max-items", type=int, default=500, help="Stop after this many browser items.")
+
+    browser_search = sub.add_parser("browser-search", help="Search Live browser items by name/source/path/URI.")
+    browser_search.add_argument("query")
+    browser_search.add_argument("--item", help="Optional root/path to search under. Defaults to all roots.")
+    browser_search.add_argument("--depth", type=int, default=6, help="How many child levels to search.")
+    browser_search.add_argument("--max-results", type=int, default=100)
+    browser_search.add_argument("--max-items", type=int, default=5000, help="Stop after scanning this many browser items.")
+
     browser_load = sub.add_parser("browser-load", help="Load a browser item into Live by path.")
     browser_load.add_argument("item")
 
@@ -278,16 +330,121 @@ def build_parser() -> argparse.ArgumentParser:
     set_routing.add_argument("--type")
     set_routing.add_argument("--channel")
 
+    clips = sub.add_parser("clips", help="List Session slots and Arrangement clips for a track.")
+    clips.add_argument("--track", required=True, type=track_value)
+
+    clip_create = sub.add_parser("clip-create-midi", help="Create a MIDI clip in Arrangement or a Session slot.")
+    clip_create.add_argument("--track", required=True, type=track_value)
+    clip_create.add_argument("--slot", type=int, help="Create in this Session slot. Omit for Arrangement.")
+    add_clip_range_args(clip_create)
+    clip_create.add_argument("--name")
+    clip_create.add_argument("--color", type=int)
+    clip_create.add_argument("--color-index", type=int)
+    clip_create.add_argument("--replace", action="store_true", help="Replace an existing Session clip in the target slot.")
+
+    clip_set = sub.add_parser("clip-set", help="Set clip properties like name, loop range, markers, mute, and launch settings.")
+    add_clip_ref_args(clip_set)
+    clip_set.add_argument("--name")
+    clip_set.add_argument("--color", type=int)
+    clip_set.add_argument("--color-index", type=int)
+    clip_set.add_argument("--muted", type=bool_arg)
+    clip_set.add_argument("--looping", type=bool_arg)
+    clip_set.add_argument("--loop-start", type=float)
+    clip_set.add_argument("--loop-end", type=float)
+    clip_set.add_argument("--start-marker", type=float)
+    clip_set.add_argument("--end-marker", type=float)
+    clip_set.add_argument("--position", type=float)
+    clip_set.add_argument("--launch-mode", type=int)
+    clip_set.add_argument("--launch-quantization", type=int)
+    clip_set.add_argument("--legato", type=bool_arg)
+    clip_set.add_argument("--velocity-amount", type=float)
+    clip_set.add_argument("--signature-numerator", type=int)
+    clip_set.add_argument("--signature-denominator", type=int)
+
+    clip_delete = sub.add_parser("clip-delete", help="Delete a clip by path, Session slot, or Arrangement index/start.")
+    add_clip_ref_args(clip_delete)
+
+    clip_copy = sub.add_parser("clip-copy", help="Copy a MIDI clip to an Arrangement time or Session slot.")
+    add_clip_ref_args(clip_copy, "source")
+    clip_copy.add_argument("--dest-track", type=track_value)
+    clip_copy.add_argument("--dest-slot", type=int)
+    clip_copy.add_argument("--dest-start", type=float)
+    clip_copy.add_argument("--dest-end", type=float)
+    clip_copy.add_argument("--dest-from-loop", action="store_true")
+    clip_copy.add_argument("--length", type=float)
+    clip_copy.add_argument("--replace", action="store_true")
+
+    clip_move = sub.add_parser("clip-move", help="Move a MIDI clip by copying it to a target and deleting the source.")
+    add_clip_ref_args(clip_move, "source")
+    clip_move.add_argument("--dest-track", type=track_value)
+    clip_move.add_argument("--dest-slot", type=int)
+    clip_move.add_argument("--dest-start", type=float)
+    clip_move.add_argument("--dest-end", type=float)
+    clip_move.add_argument("--dest-from-loop", action="store_true")
+    clip_move.add_argument("--length", type=float)
+    clip_move.add_argument("--replace", action="store_true")
+
+    clip_split = sub.add_parser("clip-split", help="Split an Arrangement MIDI clip at an Arrangement beat.")
+    add_clip_ref_args(clip_split)
+    clip_split.add_argument("--time", required=True, type=float)
+    clip_split.add_argument("--relative", action="store_true", help="Treat --time as clip-relative instead of Arrangement time.")
+
     midi_get = sub.add_parser("midi-get-notes", help="Read notes from a MIDI clip by track/slot or LOM clip path.")
     midi_get.add_argument("--path")
     midi_get.add_argument("--track", type=track_value)
     midi_get.add_argument("--slot", type=int, default=0)
+    midi_get.add_argument("--arrangement-index", type=int)
+    midi_get.add_argument("--arrangement-start", type=float)
+    add_note_region_args(midi_get)
 
     midi_add = sub.add_parser("midi-add-notes", help="Add notes to a MIDI clip from a JSON list.")
     midi_add.add_argument("--path")
     midi_add.add_argument("--track", type=track_value)
     midi_add.add_argument("--slot", type=int, default=0)
+    midi_add.add_argument("--arrangement-index", type=int)
+    midi_add.add_argument("--arrangement-start", type=float)
     midi_add.add_argument("--notes", required=True, help="JSON list of note objects with pitch/start_time/duration/velocity.")
+
+    midi_replace = sub.add_parser("midi-replace-notes", help="Replace all notes in a MIDI clip with a JSON note list.")
+    add_clip_ref_args(midi_replace)
+    midi_replace.add_argument("--notes", required=True, type=json_arg)
+
+    midi_update = sub.add_parser("midi-update-notes", help="Update existing notes by note_id with a JSON list of partial note objects.")
+    add_clip_ref_args(midi_update)
+    midi_update.add_argument("--notes", required=True, type=json_arg)
+
+    midi_remove = sub.add_parser("midi-remove-notes", help="Remove notes by note IDs or by a pitch/time region.")
+    add_clip_ref_args(midi_remove)
+    midi_remove.add_argument("--note-ids", type=int_list_arg)
+    add_note_region_args(midi_remove)
+
+    midi_clear = sub.add_parser("midi-clear-notes", help="Remove all notes, or only notes in a pitch/time region.")
+    add_clip_ref_args(midi_clear)
+    add_note_region_args(midi_clear)
+
+    midi_transform = sub.add_parser("midi-transform-notes", help="Transform notes in-place by region: transpose, move, resize, velocity, probability, mute.")
+    add_clip_ref_args(midi_transform)
+    add_note_region_args(midi_transform)
+    midi_transform.add_argument("--transpose", type=int)
+    midi_transform.add_argument("--time-delta", type=float)
+    midi_transform.add_argument("--duration-scale", type=float)
+    midi_transform.add_argument("--duration-delta", type=float)
+    midi_transform.add_argument("--velocity-scale", type=float)
+    midi_transform.add_argument("--velocity-delta", type=float)
+    midi_transform.add_argument("--probability", type=float)
+    midi_transform.add_argument("--velocity-deviation", type=float)
+    midi_transform.add_argument("--release-velocity", type=float)
+    midi_transform.add_argument("--mute", type=bool_arg)
+
+    midi_duplicate = sub.add_parser("midi-duplicate-region", help="Duplicate MIDI notes in a clip region to another clip time.")
+    add_clip_ref_args(midi_duplicate)
+    midi_duplicate.add_argument("--start", required=True, type=float)
+    region_end = midi_duplicate.add_mutually_exclusive_group(required=True)
+    region_end.add_argument("--end", type=float)
+    region_end.add_argument("--length", type=float)
+    midi_duplicate.add_argument("--destination-time", required=True, type=float)
+    midi_duplicate.add_argument("--pitch", type=int, default=-1)
+    midi_duplicate.add_argument("--transpose", type=int, default=0)
 
     clip_slots = sub.add_parser("clip-slots", help="List clip slots for a track.")
     clip_slots.add_argument("--track", required=True, type=track_value)
@@ -303,6 +460,42 @@ def build_parser() -> argparse.ArgumentParser:
     raw.add_argument("json_payload")
 
     return parser
+
+
+def add_if_not_none(payload: dict[str, Any], key: str, value: Any) -> None:
+    if value is not None:
+        payload[key] = value
+
+
+def clip_ref_payload(args: argparse.Namespace, prefix: str = "") -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    names = ("path", "track", "slot", "arrangement_index", "arrangement_start")
+    found = False
+    for name in names:
+        value = getattr(args, ("%s_%s" % (prefix, name)) if prefix else name, None)
+        if value is not None:
+            payload[("%s_%s" % (prefix, name)) if prefix else name] = value
+            found = True
+    if not found:
+        label = "%s " % prefix if prefix else ""
+        raise SystemExit("Command needs a %sclip reference: --path, --track/--slot, --track/--arrangement-index, or --track/--arrangement-start." % label)
+    return payload
+
+
+def note_region_payload(args: argparse.Namespace) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for name in ("start", "end", "length", "pitch_min", "pitch_max"):
+        add_if_not_none(payload, name, getattr(args, name, None))
+    return payload
+
+
+def clip_range_payload(args: argparse.Namespace) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for name in ("start", "end", "length"):
+        add_if_not_none(payload, name, getattr(args, name, None))
+    if getattr(args, "from_loop", False):
+        payload["from_loop"] = True
+    return payload
 
 
 def command_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -381,6 +574,22 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
         return {"command": "browser_roots"}
     if command == "browser-children":
         return {"command": "browser_children", "item": args.item}
+    if command == "browser-tree":
+        payload = {"command": "browser_tree", "depth": args.depth, "max_items": args.max_items}
+        if args.item:
+            payload["item"] = args.item
+        return payload
+    if command == "browser-search":
+        payload = {
+            "command": "browser_search",
+            "query": args.query,
+            "depth": args.depth,
+            "max_results": args.max_results,
+            "max_items": args.max_items,
+        }
+        if args.item:
+            payload["item"] = args.item
+        return payload
     if command == "browser-load":
         return {"command": "browser_load", "item": args.item}
     if command == "browser-preview":
@@ -420,14 +629,76 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
         if args.channel is not None:
             payload["channel"] = args.channel
         return payload
+    if command == "clips":
+        return {"command": "clips", "track": args.track}
+    if command == "clip-create-midi":
+        payload = {"command": "clip_create_midi", "track": args.track, **clip_range_payload(args)}
+        add_if_not_none(payload, "slot", args.slot)
+        add_if_not_none(payload, "name", args.name)
+        add_if_not_none(payload, "color", args.color)
+        add_if_not_none(payload, "color_index", args.color_index)
+        if args.replace:
+            payload["replace"] = True
+        if "slot" not in payload and not any(key in payload for key in ("start", "end", "length", "from_loop")):
+            raise SystemExit("Arrangement clip-create-midi needs --start/--length, --start/--end, or --from-loop.")
+        if "slot" in payload and not any(key in payload for key in ("end", "length", "from_loop")):
+            raise SystemExit("Session clip-create-midi needs --length or --from-loop.")
+        return payload
+    if command == "clip-set":
+        payload = {"command": "clip_set", **clip_ref_payload(args)}
+        for name in (
+            "name",
+            "color",
+            "color_index",
+            "muted",
+            "looping",
+            "loop_start",
+            "loop_end",
+            "start_marker",
+            "end_marker",
+            "position",
+            "launch_mode",
+            "launch_quantization",
+            "legato",
+            "velocity_amount",
+            "signature_numerator",
+            "signature_denominator",
+        ):
+            add_if_not_none(payload, name, getattr(args, name))
+        if len(payload) == 1 + len(clip_ref_payload(args)):
+            raise SystemExit("clip-set needs at least one property to set.")
+        return payload
+    if command == "clip-delete":
+        return {"command": "clip_delete", **clip_ref_payload(args)}
+    if command in {"clip-copy", "clip-move"}:
+        payload = {
+            "command": "clip_copy" if command == "clip-copy" else "clip_move",
+            **clip_ref_payload(args, "source"),
+        }
+        add_if_not_none(payload, "dest_track", args.dest_track)
+        add_if_not_none(payload, "dest_slot", args.dest_slot)
+        add_if_not_none(payload, "dest_start", args.dest_start)
+        add_if_not_none(payload, "dest_end", args.dest_end)
+        add_if_not_none(payload, "length", args.length)
+        if args.dest_from_loop:
+            payload["dest_from_loop"] = True
+        if args.replace:
+            payload["replace"] = True
+        if args.dest_slot is None and args.dest_start is None and args.dest_end is None and not args.dest_from_loop:
+            raise SystemExit("%s needs --dest-slot, --dest-start/--dest-end, or --dest-from-loop." % command)
+        return payload
+    if command == "clip-split":
+        return {"command": "clip_split", **clip_ref_payload(args), "time": args.time, "relative": args.relative}
     if command == "midi-get-notes":
         if not args.path and args.track is None:
             raise SystemExit("midi-get-notes needs --path or --track.")
-        payload = {"command": "midi_get_notes", "slot": args.slot}
+        payload = {"command": "midi_get_notes", "slot": args.slot, **note_region_payload(args)}
         if args.path:
             payload["path"] = args.path
         if args.track is not None:
             payload["track"] = args.track
+        add_if_not_none(payload, "arrangement_index", args.arrangement_index)
+        add_if_not_none(payload, "arrangement_start", args.arrangement_start)
         return payload
     if command == "midi-add-notes":
         if not args.path and args.track is None:
@@ -441,6 +712,50 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
             payload["path"] = args.path
         if args.track is not None:
             payload["track"] = args.track
+        add_if_not_none(payload, "arrangement_index", args.arrangement_index)
+        add_if_not_none(payload, "arrangement_start", args.arrangement_start)
+        return payload
+    if command == "midi-replace-notes":
+        return {"command": "midi_replace_notes", **clip_ref_payload(args), "notes": args.notes}
+    if command == "midi-update-notes":
+        return {"command": "midi_update_notes", **clip_ref_payload(args), "notes": args.notes}
+    if command == "midi-remove-notes":
+        payload = {"command": "midi_remove_notes", **clip_ref_payload(args), **note_region_payload(args)}
+        add_if_not_none(payload, "note_ids", args.note_ids)
+        if "note_ids" not in payload and not any(key in payload for key in ("start", "end", "length", "pitch_min", "pitch_max")):
+            raise SystemExit("midi-remove-notes needs --note-ids or a region/pitch filter.")
+        return payload
+    if command == "midi-clear-notes":
+        return {"command": "midi_clear_notes", **clip_ref_payload(args), **note_region_payload(args)}
+    if command == "midi-transform-notes":
+        payload = {"command": "midi_transform_notes", **clip_ref_payload(args), **note_region_payload(args)}
+        for name in (
+            "transpose",
+            "time_delta",
+            "duration_scale",
+            "duration_delta",
+            "velocity_scale",
+            "velocity_delta",
+            "probability",
+            "velocity_deviation",
+            "release_velocity",
+            "mute",
+        ):
+            add_if_not_none(payload, name, getattr(args, name))
+        if not any(key in payload for key in ("transpose", "time_delta", "duration_scale", "duration_delta", "velocity_scale", "velocity_delta", "probability", "velocity_deviation", "release_velocity", "mute")):
+            raise SystemExit("midi-transform-notes needs at least one transform option.")
+        return payload
+    if command == "midi-duplicate-region":
+        payload = {
+            "command": "midi_duplicate_region",
+            **clip_ref_payload(args),
+            "start": args.start,
+            "destination_time": args.destination_time,
+            "pitch": args.pitch,
+            "transpose": args.transpose,
+        }
+        add_if_not_none(payload, "end", args.end)
+        add_if_not_none(payload, "length", args.length)
         return payload
     if command == "clip-slots":
         return {"command": "clip_slots", "track": args.track}

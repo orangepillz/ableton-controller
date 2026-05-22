@@ -85,6 +85,8 @@ Browse and load Live content:
 ```sh
 python3 abletonctl.py browser-roots
 python3 abletonctl.py browser-children audio_effects
+python3 abletonctl.py browser-tree instruments --depth 2 --max-items 200
+python3 abletonctl.py browser-search "EQ Eight" --item audio_effects --depth 3
 python3 abletonctl.py browser-load "audio_effects/EQ Eight"
 ```
 
@@ -122,9 +124,22 @@ python3 abletonctl.py fire-scene --scene "Drop"
 Read and write MIDI notes in a MIDI clip:
 
 ```sh
+python3 abletonctl.py clip-create-midi --track "Codex MIDI" --slot 0 --length 4 --name "Bass Loop"
+python3 abletonctl.py clip-create-midi --track "Codex MIDI" --start 64 --end 72 --name "Arrangement Bass"
+python3 abletonctl.py clips --track "Codex MIDI"
 python3 abletonctl.py midi-add-notes --track "Codex MIDI" --slot 0 --notes '[{"pitch":60,"start_time":0,"duration":1,"velocity":96}]'
 python3 abletonctl.py midi-get-notes --track "Codex MIDI" --slot 0
+python3 abletonctl.py midi-update-notes --track "Codex MIDI" --slot 0 --notes '[{"note_id":1,"pitch":62,"velocity":110}]'
+python3 abletonctl.py midi-transform-notes --track "Codex MIDI" --slot 0 --start 0 --end 4 --transpose 12
+python3 abletonctl.py clip-copy --source-track "Codex MIDI" --source-slot 0 --dest-track "Codex MIDI" --dest-start 80
+python3 abletonctl.py clip-split --track "Codex MIDI" --arrangement-start 80 --time 82
+python3 abletonctl.py clip-set --track "Codex MIDI" --slot 0 --loop-start 0 --loop-end 2 --end-marker 2
 ```
+
+The public Live API supports MIDI note pitch, timing, velocity, mute, probability,
+velocity deviation, and release velocity. MIDI Ctrl/Pitch Bend clip-envelope drawing is
+not exposed by the supported Live Object Model, so use device/parameter automation or
+recorded MIDI controller data for pitch-bend envelopes.
 
 Send a raw JSON command:
 
