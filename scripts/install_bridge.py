@@ -52,6 +52,10 @@ def activate(args: argparse.Namespace) -> None:
     data = prefs.read_bytes()
     offset = find_pref_string(data, old, old_bytes)
     if offset < 0:
+        new_offset = find_pref_string(data, new, new_bytes)
+        if new_offset >= 0:
+            print(f"{new!r} is already configured in {prefs}")
+            return
         raise SystemExit(f"Could not find standalone control-surface value {old!r} in {prefs}")
 
     timestamp = _datetime.datetime.now().strftime("%Y%m%d-%H%M%S")

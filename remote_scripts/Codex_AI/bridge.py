@@ -1,4 +1,5 @@
 import json
+import os
 import queue
 import re
 import socket
@@ -236,8 +237,18 @@ class CodexBridge(ControlSurface):
             return self._clips(payload)
         if command == "clip_create_midi":
             return self._clip_create_midi(payload)
+        if command == "clip_create_audio":
+            return self._clip_create_audio(payload)
         if command == "clip_set":
             return self._clip_set(payload)
+        if command == "clip_warp":
+            return self._clip_warp(payload)
+        if command == "clip_warp_marker_add":
+            return self._clip_warp_marker_add(payload)
+        if command == "clip_warp_marker_move":
+            return self._clip_warp_marker_move(payload)
+        if command == "clip_warp_marker_remove":
+            return self._clip_warp_marker_remove(payload)
         if command == "clip_delete":
             return self._clip_delete(payload)
         if command == "clip_copy":
@@ -396,6 +407,54 @@ class CodexBridge(ControlSurface):
             pass
         return {"location": location, "clip": self._clip_info(clip)}
 
+    def _clip_create_audio(self, payload):
+        track = self._resolve_track(payload.get("track"))
+        self._ensure_audio_track(track)
+        file_path = str(payload.get("file") or payload.get("file_path") or "").strip()
+        if not file_path:
+            raise ValueError("file is required")
+        if not os.path.isabs(file_path):
+            raise ValueError("Audio file path must be absolute")
+        if not os.path.exists(file_path):
+            raise ValueError("Audio file does not exist: %s" % file_path)
+        name = payload.get("name")
+        color = payload.get("color")
+        color_index = payload.get("color_index")
+        if "slot" in payload:
+            slot_index = int(payload.get("slot"))
+            slot = self._resolve_clip_slot(track, slot_index)
+            if slot.has_clip:
+                if payload.get("replace", False):
+                    slot.delete_clip()
+                else:
+                    raise ValueError("Clip slot %s on %s already has a clip" % (slot_index, track.name))
+            clip = slot.create_audio_clip(file_path)
+            if clip is None:
+                clip = slot.clip
+            location = {"kind": "session", "track": track.name, "slot": slot_index}
+        else:
+            if payload.get("from_loop", False):
+                start = float(self.song().loop_start)
+            else:
+                start = float(payload.get("start", 0.0))
+            clip = track.create_audio_clip(file_path, start)
+            if clip is None:
+                clip = self._find_arrangement_clip_at(track, start)
+            location = {"kind": "arrangement", "track": track.name, "start": start}
+        self._set_optional_clip_property(clip, "name", name)
+        self._set_optional_clip_property(clip, "color", color)
+        self._set_optional_clip_property(clip, "color_index", color_index)
+        if "warping" in payload:
+            clip.warping = bool(payload["warping"])
+        if "warp_mode" in payload:
+            clip.warp_mode = int(payload["warp_mode"])
+        try:
+            self.song().view.selected_track = track
+            self.song().view.detail_clip = clip
+        except Exception:
+            pass
+        return {"location": location, "clip": self._clip_info(clip), "warp_markers": self._warp_marker_infos(clip)}
+
     def _clip_set(self, payload):
         ref = self._resolve_clip_ref(payload)
         clip = ref["clip"]
@@ -417,11 +476,73 @@ class CodexBridge(ControlSurface):
             ("loop_end", "loop_end"),
             ("start_marker", "start_marker"),
             ("end_marker", "end_marker"),
+            ("gain", "gain"),
+            ("pitch_coarse", "pitch_coarse"),
+            ("pitch_fine", "pitch_fine"),
+            ("ram_mode", "ram_mode"),
+            ("warping", "warping"),
+            ("warp_mode", "warp_mode"),
         ):
             if key in payload:
                 setattr(clip, attr, payload[key])
                 changed[attr] = self._safe_get(clip, attr)
         return {"location": self._clip_ref_info(ref), "changed": changed, "clip": self._clip_info(clip)}
+
+    def _clip_warp(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        clip = ref["clip"]
+        self._ensure_audio_clip(clip)
+        changed = {}
+        for key, attr in (
+            ("warping", "warping"),
+            ("warp_mode", "warp_mode"),
+            ("gain", "gain"),
+            ("pitch_coarse", "pitch_coarse"),
+            ("pitch_fine", "pitch_fine"),
+            ("ram_mode", "ram_mode"),
+        ):
+            if key in payload:
+                setattr(clip, attr, payload[key])
+                changed[attr] = self._safe_get(clip, attr)
+        return self._clip_warp_info(ref, changed)
+
+    def _clip_warp_marker_add(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        clip = ref["clip"]
+        self._ensure_warped_audio_clip(clip)
+        beat_time = float(payload.get("beat_time"))
+        sample_time = payload.get("sample_time", None)
+        marker = self._add_warp_marker(clip, beat_time, sample_time)
+        return self._clip_warp_info(ref, {"added_marker": marker})
+
+    def _clip_warp_marker_move(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        clip = ref["clip"]
+        self._ensure_warped_audio_clip(clip)
+        beat_time = float(payload.get("beat_time"))
+        if "to_beat" in payload:
+            distance = float(payload.get("to_beat")) - beat_time
+        else:
+            distance = float(payload.get("distance"))
+        clip.move_warp_marker(beat_time, distance)
+        return self._clip_warp_info(ref, {"moved_marker": {"beat_time": beat_time, "distance": distance}})
+
+    def _clip_warp_marker_remove(self, payload):
+        ref = self._resolve_clip_ref(payload)
+        clip = ref["clip"]
+        self._ensure_warped_audio_clip(clip)
+        beat_time = float(payload.get("beat_time"))
+        clip.remove_warp_marker(beat_time)
+        return self._clip_warp_info(ref, {"removed_marker": {"beat_time": beat_time}})
+
+    def _clip_warp_info(self, ref, changed=None):
+        clip = ref["clip"]
+        return {
+            "location": self._clip_ref_info(ref),
+            "changed": changed or {},
+            "clip": self._clip_info(clip),
+            "warp_markers": self._warp_marker_infos(clip),
+        }
 
     def _clip_delete(self, payload):
         ref = self._resolve_clip_ref(payload)
@@ -955,9 +1076,22 @@ class CodexBridge(ControlSurface):
         if not self._safe_get(track, "has_midi_input", False):
             raise ValueError("Track %s is not a MIDI track" % track.name)
 
+    def _ensure_audio_track(self, track):
+        if not self._safe_get(track, "has_audio_input", False):
+            raise ValueError("Track %s is not an audio track" % track.name)
+
     def _ensure_midi_clip(self, clip):
         if not self._safe_get(clip, "is_midi_clip", False):
             raise ValueError("Clip is not a MIDI clip")
+
+    def _ensure_audio_clip(self, clip):
+        if not self._safe_get(clip, "is_audio_clip", False):
+            raise ValueError("Clip is not an audio clip")
+
+    def _ensure_warped_audio_clip(self, clip):
+        self._ensure_audio_clip(clip)
+        if not self._safe_get(clip, "warping", False):
+            raise ValueError("Clip warping must be enabled before editing warp markers")
 
     def _resolve_clip_slot(self, track, slot_index):
         slots = list(track.clip_slots)
@@ -1154,6 +1288,124 @@ class CodexBridge(ControlSurface):
             setattr(clip, attr, value)
         except Exception:
             pass
+
+    def _add_warp_marker(self, clip, beat_time, sample_time):
+        if sample_time is None:
+            sample_time = self._sample_time_for_beat(clip, beat_time)
+        last_error = None
+        for marker in self._warp_marker_candidates(clip, beat_time, sample_time):
+            try:
+                clip.add_warp_marker(marker)
+                return self._find_warp_marker(clip, beat_time)
+            except Exception as error:
+                last_error = error
+        if last_error is None:
+            raise ValueError("Live.Clip.WarpMarker is not available")
+        raise ValueError("Could not add warp marker: %s" % last_error)
+
+    def _sample_time_for_beat(self, clip, beat_time):
+        target = float(beat_time)
+        markers = sorted(self._warp_marker_infos(clip), key=lambda marker: float(marker.get("beat_time", 0.0)))
+        usable = [marker for marker in markers if marker.get("beat_time") is not None and marker.get("sample_time") is not None]
+        if len(usable) >= 2:
+            left = usable[0]
+            right = usable[1]
+            for index in range(len(usable) - 1):
+                current = usable[index]
+                candidate = usable[index + 1]
+                if float(current["beat_time"]) <= target <= float(candidate["beat_time"]):
+                    left = current
+                    right = candidate
+                    break
+                if target > float(candidate["beat_time"]):
+                    left = current
+                    right = candidate
+            beat_span = float(right["beat_time"]) - float(left["beat_time"])
+            if abs(beat_span) > 0.000001:
+                ratio = (target - float(left["beat_time"])) / beat_span
+                return float(left["sample_time"]) + ratio * (float(right["sample_time"]) - float(left["sample_time"]))
+            return float(left["sample_time"])
+
+        sample_rate = float(self._safe_get(clip, "sample_rate", 0.0) or 0.0)
+        sample_length = float(self._safe_get(clip, "sample_length", 0.0) or 0.0)
+        sample_duration = sample_length / sample_rate if sample_rate > 0.0 else 0.0
+        clip_length = float(self._safe_get(clip, "length", 0.0) or 0.0)
+        if clip_length <= 0.0:
+            clip_length = float(self._safe_get(clip, "end_marker", 0.0) or 0.0)
+        if clip_length <= 0.0:
+            raise ValueError("Cannot infer sample_time for beat_time without warp markers or clip length")
+        return max(0.0, min(sample_duration, (target / clip_length) * sample_duration))
+
+    def _warp_marker_candidates(self, clip, beat_time, sample_time):
+        classes = []
+        if Live is not None:
+            try:
+                classes.append(Live.Clip.WarpMarker)
+            except Exception:
+                pass
+        try:
+            markers = list(clip.warp_markers)
+            if markers:
+                classes.append(type(markers[0]))
+        except Exception:
+            pass
+
+        unique_classes = []
+        for marker_class in classes:
+            if marker_class not in unique_classes:
+                unique_classes.append(marker_class)
+
+        for marker_class in unique_classes:
+            data = {"beat_time": float(beat_time)}
+            if sample_time is not None:
+                data["sample_time"] = float(sample_time)
+            try:
+                yield marker_class(**data)
+            except Exception:
+                pass
+            if sample_time is not None:
+                try:
+                    yield marker_class(float(sample_time), float(beat_time))
+                except Exception:
+                    pass
+            try:
+                marker = marker_class()
+                marker.beat_time = float(beat_time)
+                if sample_time is not None:
+                    marker.sample_time = float(sample_time)
+                yield marker
+            except Exception:
+                pass
+            if sample_time is not None:
+                try:
+                    yield marker_class(float(beat_time), float(sample_time))
+                except Exception:
+                    pass
+
+    def _find_warp_marker(self, clip, beat_time):
+        markers = self._warp_marker_infos(clip)
+        if not markers:
+            return None
+        target = float(beat_time)
+        best = min(markers, key=lambda marker: abs(float(marker.get("beat_time", 0.0)) - target))
+        if abs(float(best.get("beat_time", 0.0)) - target) <= 0.01:
+            return best
+        return None
+
+    def _warp_marker_infos(self, clip):
+        if not self._safe_get(clip, "is_audio_clip", False):
+            return []
+        try:
+            markers = list(clip.warp_markers)
+        except Exception:
+            return []
+        return [self._warp_marker_info(marker) for marker in markers]
+
+    def _warp_marker_info(self, marker):
+        return {
+            "sample_time": self._safe_get(marker, "sample_time"),
+            "beat_time": self._safe_get(marker, "beat_time"),
+        }
 
     def _add_note_dicts(self, clip, notes):
         if not notes:
@@ -1550,8 +1802,14 @@ class CodexBridge(ControlSurface):
             "signature_denominator": self._safe_get(clip, "signature_denominator"),
             "velocity_amount": self._safe_get(clip, "velocity_amount"),
             "gain": self._safe_get(clip, "gain"),
+            "gain_display_string": self._safe_get(clip, "gain_display_string"),
+            "file_path": self._safe_get(clip, "file_path"),
             "pitch_coarse": self._safe_get(clip, "pitch_coarse"),
             "pitch_fine": self._safe_get(clip, "pitch_fine"),
+            "ram_mode": self._safe_get(clip, "ram_mode"),
+            "sample_length": self._safe_get(clip, "sample_length"),
+            "sample_rate": self._safe_get(clip, "sample_rate"),
+            "warp_mode": self._safe_get(clip, "warp_mode"),
             "warping": self._safe_get(clip, "warping"),
         }
 
@@ -1616,6 +1874,8 @@ class CodexBridge(ControlSurface):
             return self._clip_info(value)
         if hasattr(value, "is_loadable") and hasattr(value, "children"):
             return {"type": type(value).__name__, "item": self._browser_item_info(value)}
+        if hasattr(value, "sample_time") and hasattr(value, "beat_time"):
+            return self._warp_marker_info(value)
         if hasattr(value, "pitch") and hasattr(value, "start_time"):
             return self._note_info(value)
         return {"type": type(value).__name__, "summary": self._summary(value)}

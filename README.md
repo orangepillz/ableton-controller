@@ -141,6 +141,24 @@ velocity deviation, and release velocity. MIDI Ctrl/Pitch Bend clip-envelope dra
 not exposed by the supported Live Object Model, so use device/parameter automation or
 recorded MIDI controller data for pitch-bend envelopes.
 
+Create and warp audio clips:
+
+```sh
+python3 abletonctl.py create-track --type audio --name "Codex Audio"
+python3 abletonctl.py clip-create-audio --track "Codex Audio" --file "/absolute/path/to/loop.wav" --start 96 --warping true --warp-mode beats
+python3 abletonctl.py clip-warp --track "Codex Audio" --arrangement-start 96
+python3 abletonctl.py clip-warp --track "Codex Audio" --arrangement-start 96 --warping true --warp-mode complex-pro --pitch-coarse -12
+python3 abletonctl.py clip-warp-marker-add --track "Codex Audio" --arrangement-start 96 --beat-time 4 --sample-time 3.85
+python3 abletonctl.py clip-warp-marker-move --track "Codex Audio" --arrangement-start 96 --beat-time 4 --to-beat 4.25
+python3 abletonctl.py clip-warp-marker-remove --track "Codex Audio" --arrangement-start 96 --beat-time 4.25
+```
+
+Warp modes can be passed by name (`beats`, `tones`, `texture`, `repitch`,
+`complex`, `rex`, `complex-pro`) or by their Live API index (`0` through `6`).
+For marker adds, `--sample-time` is optional; when omitted, the bridge
+interpolates from the current marker map to preserve playback timing. Marker
+commands require the clip's Warp switch to already be on.
+
 Send a raw JSON command:
 
 ```sh

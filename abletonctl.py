@@ -145,6 +145,36 @@ def int_list_arg(value: str) -> list[int]:
     return [int(item.strip()) for item in value.split(",") if item.strip()]
 
 
+def warp_mode_value(value: str) -> int:
+    modes = {
+        "beats": 0,
+        "beat": 0,
+        "tones": 1,
+        "tone": 1,
+        "texture": 2,
+        "textures": 2,
+        "repitch": 3,
+        "re-pitch": 3,
+        "re_pitch": 3,
+        "complex": 4,
+        "rex": 5,
+        "complexpro": 6,
+        "complex-pro": 6,
+        "complex_pro": 6,
+        "complex pro": 6,
+    }
+    normalized = value.strip().lower()
+    if normalized in modes:
+        return modes[normalized]
+    try:
+        mode = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected a warp mode name or index 0..6")
+    if mode < 0 or mode > 6:
+        raise argparse.ArgumentTypeError("warp mode index must be 0..6")
+    return mode
+
+
 def add_clip_ref_args(parser: argparse.ArgumentParser, prefix: str = "") -> None:
     flag = "--%s" if not prefix else "--%s-%%s" % prefix
     parser.add_argument(flag % "path")
@@ -342,7 +372,19 @@ def build_parser() -> argparse.ArgumentParser:
     clip_create.add_argument("--color-index", type=int)
     clip_create.add_argument("--replace", action="store_true", help="Replace an existing Session clip in the target slot.")
 
-    clip_set = sub.add_parser("clip-set", help="Set clip properties like name, loop range, markers, mute, and launch settings.")
+    clip_create_audio = sub.add_parser("clip-create-audio", help="Create an audio clip from a file in Arrangement or a Session slot.")
+    clip_create_audio.add_argument("--track", required=True, type=track_value)
+    clip_create_audio.add_argument("--file", required=True, help="Absolute path to an audio file.")
+    clip_create_audio.add_argument("--slot", type=int, help="Create in this Session slot. Omit for Arrangement.")
+    add_clip_range_args(clip_create_audio)
+    clip_create_audio.add_argument("--name")
+    clip_create_audio.add_argument("--color", type=int)
+    clip_create_audio.add_argument("--color-index", type=int)
+    clip_create_audio.add_argument("--replace", action="store_true", help="Replace an existing Session clip in the target slot.")
+    clip_create_audio.add_argument("--warping", type=bool_arg)
+    clip_create_audio.add_argument("--warp-mode", type=warp_mode_value)
+
+    clip_set = sub.add_parser("clip-set", help="Set clip properties like name, loop range, markers, mute, launch, and audio settings.")
     add_clip_ref_args(clip_set)
     clip_set.add_argument("--name")
     clip_set.add_argument("--color", type=int)
@@ -360,6 +402,37 @@ def build_parser() -> argparse.ArgumentParser:
     clip_set.add_argument("--velocity-amount", type=float)
     clip_set.add_argument("--signature-numerator", type=int)
     clip_set.add_argument("--signature-denominator", type=int)
+    clip_set.add_argument("--gain", type=float)
+    clip_set.add_argument("--pitch-coarse", type=int)
+    clip_set.add_argument("--pitch-fine", type=float)
+    clip_set.add_argument("--ram-mode", type=bool_arg)
+    clip_set.add_argument("--warping", type=bool_arg)
+    clip_set.add_argument("--warp-mode", type=warp_mode_value)
+
+    clip_warp = sub.add_parser("clip-warp", help="Read or set audio clip warp state, mode, pitch, gain, and markers.")
+    add_clip_ref_args(clip_warp)
+    clip_warp.add_argument("--warping", type=bool_arg)
+    clip_warp.add_argument("--warp-mode", type=warp_mode_value)
+    clip_warp.add_argument("--gain", type=float)
+    clip_warp.add_argument("--pitch-coarse", type=int)
+    clip_warp.add_argument("--pitch-fine", type=float)
+    clip_warp.add_argument("--ram-mode", type=bool_arg)
+
+    warp_add = sub.add_parser("clip-warp-marker-add", help="Add a warp marker to a warped audio clip.")
+    add_clip_ref_args(warp_add)
+    warp_add.add_argument("--beat-time", required=True, type=float, help="Clip beat to pin.")
+    warp_add.add_argument("--sample-time", type=float, help="Sample-file time in seconds. Omit to preserve current playback timing by interpolation.")
+
+    warp_move = sub.add_parser("clip-warp-marker-move", help="Move an existing warp marker by beat distance or to a beat.")
+    add_clip_ref_args(warp_move)
+    warp_move.add_argument("--beat-time", required=True, type=float, help="Current beat time of the marker to move.")
+    move_group = warp_move.add_mutually_exclusive_group(required=True)
+    move_group.add_argument("--distance", type=float, help="Beat distance to move the marker.")
+    move_group.add_argument("--to-beat", type=float, help="Destination beat time for the marker.")
+
+    warp_remove = sub.add_parser("clip-warp-marker-remove", help="Remove a warp marker at a beat time.")
+    add_clip_ref_args(warp_remove)
+    warp_remove.add_argument("--beat-time", required=True, type=float)
 
     clip_delete = sub.add_parser("clip-delete", help="Delete a clip by path, Session slot, or Arrangement index/start.")
     add_clip_ref_args(clip_delete)
@@ -644,6 +717,19 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
         if "slot" in payload and not any(key in payload for key in ("end", "length", "from_loop")):
             raise SystemExit("Session clip-create-midi needs --length or --from-loop.")
         return payload
+    if command == "clip-create-audio":
+        payload = {"command": "clip_create_audio", "track": args.track, "file": args.file, **clip_range_payload(args)}
+        add_if_not_none(payload, "slot", args.slot)
+        add_if_not_none(payload, "name", args.name)
+        add_if_not_none(payload, "color", args.color)
+        add_if_not_none(payload, "color_index", args.color_index)
+        add_if_not_none(payload, "warping", args.warping)
+        add_if_not_none(payload, "warp_mode", args.warp_mode)
+        if args.replace:
+            payload["replace"] = True
+        if "slot" not in payload and "start" not in payload and not payload.get("from_loop", False):
+            raise SystemExit("Arrangement clip-create-audio needs --start or --from-loop.")
+        return payload
     if command == "clip-set":
         payload = {"command": "clip_set", **clip_ref_payload(args)}
         for name in (
@@ -663,11 +749,35 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
             "velocity_amount",
             "signature_numerator",
             "signature_denominator",
+            "gain",
+            "pitch_coarse",
+            "pitch_fine",
+            "ram_mode",
+            "warping",
+            "warp_mode",
         ):
             add_if_not_none(payload, name, getattr(args, name))
         if len(payload) == 1 + len(clip_ref_payload(args)):
             raise SystemExit("clip-set needs at least one property to set.")
         return payload
+    if command == "clip-warp":
+        payload = {"command": "clip_warp", **clip_ref_payload(args)}
+        for name in ("warping", "warp_mode", "gain", "pitch_coarse", "pitch_fine", "ram_mode"):
+            add_if_not_none(payload, name, getattr(args, name))
+        return payload
+    if command == "clip-warp-marker-add":
+        payload = {"command": "clip_warp_marker_add", **clip_ref_payload(args), "beat_time": args.beat_time}
+        add_if_not_none(payload, "sample_time", args.sample_time)
+        return payload
+    if command == "clip-warp-marker-move":
+        payload = {"command": "clip_warp_marker_move", **clip_ref_payload(args), "beat_time": args.beat_time}
+        if args.to_beat is not None:
+            payload["to_beat"] = args.to_beat
+        else:
+            payload["distance"] = args.distance
+        return payload
+    if command == "clip-warp-marker-remove":
+        return {"command": "clip_warp_marker_remove", **clip_ref_payload(args), "beat_time": args.beat_time}
     if command == "clip-delete":
         return {"command": "clip_delete", **clip_ref_payload(args)}
     if command in {"clip-copy", "clip-move"}:
