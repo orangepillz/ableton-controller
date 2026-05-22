@@ -251,3 +251,9 @@ python3 -m pip install -r requirements.txt
 python3 scripts/audit_manual.py extract
 python3 scripts/update_audit_coverage.py
 ```
+
+## Architecture
+
+Code ownership, module boundaries, and maintainability conventions are documented in
+`docs/architecture.md`. Repository-wide standards for future agents and contributors
+are in `AGENTS.md`.

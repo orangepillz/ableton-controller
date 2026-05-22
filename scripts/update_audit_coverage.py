@@ -166,7 +166,7 @@ def write_doc(manifest: dict[str, Any], outline: list[dict[str, Any]], ledger: P
         f"- SHA-256: `{manifest['pdf_sha256']}`",
         f"- Page count: {manifest['page_count']}",
         f"- Pages extracted/read ledger: `{manifest['page_ledger']}`",
-        f"- Extracted page text files: `audit/manual_pages/page_####.txt`",
+        "- Extracted page text files: `audit/manual_pages/page_####.txt`",
         f"- PDF outline entries inventoried: {manifest['outline_entries']}",
         f"- Ledger verification: {stats['pages']} pages, {stats['zero_word_pages']} zero-word pages, min {stats['min_words']} words, max {stats['max_words']} words.",
         "",

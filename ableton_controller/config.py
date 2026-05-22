@@ -1,0 +1,73 @@
+"""Runtime defaults and command sets for abletonctl."""
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 37337
+DEFAULT_APP_NAME = "Ableton Live 12 Suite"
+STOCK_DEVICE_ROOTS = ("instruments", "audio_effects", "midi_effects", "max_for_live")
+
+LOCAL_COMMANDS = {
+    "hotkey",
+    "key-sequence",
+    "type-text",
+    "menu-search",
+    "save",
+    "stock-devices",
+    "stock-controls",
+    "stock-coverage",
+    "set-stock-control",
+    "clip-stock-automation-get",
+    "clip-stock-automation-set",
+    "clip-stock-automation-clear",
+}
+
+MODIFIER_NAMES = {
+    "cmd": "command down",
+    "command": "command down",
+    "meta": "command down",
+    "option": "option down",
+    "opt": "option down",
+    "alt": "option down",
+    "shift": "shift down",
+    "control": "control down",
+    "ctrl": "control down",
+}
+
+KEY_CODES = {
+    "return": 36,
+    "enter": 36,
+    "tab": 48,
+    "space": 49,
+    "delete": 51,
+    "backspace": 51,
+    "escape": 53,
+    "esc": 53,
+    "left": 123,
+    "right": 124,
+    "down": 125,
+    "up": 126,
+    "home": 115,
+    "end": 119,
+    "pageup": 116,
+    "pagedown": 121,
+    "forwarddelete": 117,
+    "f1": 122,
+    "f2": 120,
+    "f3": 99,
+    "f4": 118,
+    "f5": 96,
+    "f6": 97,
+    "f7": 98,
+    "f8": 100,
+    "f9": 101,
+    "f10": 109,
+    "f11": 103,
+    "f12": 111,
+    "f13": 105,
+    "f14": 107,
+    "f15": 113,
+    "f16": 106,
+    "f17": 64,
+    "f18": 79,
+    "f19": 80,
+    "f20": 90,
+}
