@@ -11,13 +11,39 @@ import sys
 import time
 from typing import Any
 
+from stock_device_controls import (
+    DEFAULT_REGISTRY_PATH,
+    control_parameter_name,
+    find_control,
+    find_device,
+    iter_devices,
+    load_registry,
+    normalize,
+    registry_summary,
+    verify_registry,
+)
+
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 37337
 DEFAULT_APP_NAME = "Ableton Live 12 Suite"
+STOCK_DEVICE_ROOTS = ("instruments", "audio_effects", "midi_effects", "max_for_live")
 
 
-LOCAL_COMMANDS = {"hotkey", "key-sequence", "type-text", "menu-search", "save"}
+LOCAL_COMMANDS = {
+    "hotkey",
+    "key-sequence",
+    "type-text",
+    "menu-search",
+    "save",
+    "stock-devices",
+    "stock-controls",
+    "stock-coverage",
+    "set-stock-control",
+    "clip-stock-automation-get",
+    "clip-stock-automation-set",
+    "clip-stock-automation-clear",
+}
 MODIFIER_NAMES = {
     "cmd": "command down",
     "command": "command down",
@@ -232,6 +258,21 @@ def add_app_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--delay", type=float, default=0.08, help="Delay after activating Live, in seconds.")
 
 
+def add_registry_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--registry", default=str(DEFAULT_REGISTRY_PATH), help="Stock device controls registry JSON.")
+
+
+def add_stock_root_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--root", choices=STOCK_DEVICE_ROOTS, help="Restrict stock-device lookup to this browser root.")
+
+
+def add_stock_control_value_args(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--value", type=float, help="Absolute parameter value.")
+    group.add_argument("--normalized", type=float, help="0..1 value across the parameter range.")
+    group.add_argument("--delta", type=float, help="Relative change from current value.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Control Ableton Live through Codex_AI.")
     add_common(parser)
@@ -259,7 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
     device_source = device_add.add_mutually_exclusive_group(required=True)
     device_source.add_argument("--path", help="Browser path, e.g. 'audio_effects/EQ Eight'.")
     device_source.add_argument("--name", help="Built-in device name, e.g. 'EQ Eight'.")
-    device_add.add_argument("--root", choices=("audio_effects", "midi_effects", "instruments"), help="Browser root to search when using --name.")
+    device_add.add_argument("--root", choices=STOCK_DEVICE_ROOTS, help="Browser root to search when using --name.")
     device_add.add_argument("--target-index", type=int, help="Device-chain index to place the device at.")
     device_add.add_argument("--allow-presets", action="store_true", help="Allow loading non-device presets when resolving by browser path.")
 
@@ -273,6 +314,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     params = sub.add_parser("params", help="List parameters for a device.")
     add_device_ref_args(params)
+
+    stock_devices = sub.add_parser("stock-devices", help="List stock Live devices from the explicit controls registry.")
+    add_registry_arg(stock_devices)
+    add_stock_root_arg(stock_devices)
+    stock_devices.add_argument("--query", help="Filter by name, path, class name, or slug.")
+    stock_devices.add_argument("--controls", action="store_true", help="Include every explicit control in the listing.")
+    stock_devices.add_argument("--summary", action="store_true", help="Only print registry summary counts.")
+
+    stock_controls = sub.add_parser("stock-controls", help="List explicit controls for one stock Live device.")
+    add_registry_arg(stock_controls)
+    add_stock_root_arg(stock_controls)
+    stock_controls.add_argument("--device", required=True, help="Stock device name, path, class name, or slug.")
+    stock_controls.add_argument("--control", help="Optional control name, slug, alias, or parameter index.")
+
+    stock_coverage = sub.add_parser("stock-coverage", help="Verify that the stock device controls registry is complete.")
+    add_registry_arg(stock_coverage)
+
+    stock_set = sub.add_parser("set-stock-control", help="Set a loaded stock device control by registry alias.")
+    add_registry_arg(stock_set)
+    add_device_ref_args(stock_set)
+    add_stock_root_arg(stock_set)
+    stock_set.add_argument("--stock-device", help="Registry device name/path/slug. Defaults to --device when that is a name.")
+    stock_set.add_argument("--control", required=True, help="Control name, slug, alias, or parameter index.")
+    add_stock_control_value_args(stock_set)
 
     set_track = sub.add_parser("set-track", help="Set mixer properties on a track.")
     set_track.add_argument("--track", required=True, type=track_value)
@@ -499,6 +564,34 @@ def build_parser() -> argparse.ArgumentParser:
     add_clip_automation_device_args(automation_clear)
     automation_clear.add_argument("--param", type=track_value, help="Parameter to clear. Omit with --all.")
     automation_clear.add_argument("--all", action="store_true", help="Clear every automation envelope in the clip.")
+
+    stock_automation_get = sub.add_parser("clip-stock-automation-get", help="Read clip automation using a stock-device control alias.")
+    add_registry_arg(stock_automation_get)
+    add_clip_ref_args(stock_automation_get)
+    add_clip_automation_device_args(stock_automation_get)
+    add_stock_root_arg(stock_automation_get)
+    stock_automation_get.add_argument("--stock-device", help="Registry device name/path/slug. Defaults to --device when that is a name.")
+    stock_automation_get.add_argument("--control", required=True, help="Control name, slug, alias, or parameter index.")
+    stock_automation_get.add_argument("--times", type=float_list_arg, help="Comma-separated or JSON list of clip times to sample.")
+
+    stock_automation_set = sub.add_parser("clip-stock-automation-set", help="Create/update clip automation using a stock-device control alias.")
+    add_registry_arg(stock_automation_set)
+    add_clip_ref_args(stock_automation_set)
+    add_clip_automation_device_args(stock_automation_set)
+    add_stock_root_arg(stock_automation_set)
+    stock_automation_set.add_argument("--stock-device", help="Registry device name/path/slug. Defaults to --device when that is a name.")
+    stock_automation_set.add_argument("--control", required=True, help="Control name, slug, alias, or parameter index.")
+    stock_automation_set.add_argument("--steps", required=True, type=json_arg, help="JSON list of {time,duration,value|normalized} objects.")
+    stock_automation_set.add_argument("--clear", action="store_true", help="Clear this parameter's existing envelope before inserting steps.")
+
+    stock_automation_clear = sub.add_parser("clip-stock-automation-clear", help="Clear clip automation using a stock-device control alias.")
+    add_registry_arg(stock_automation_clear)
+    add_clip_ref_args(stock_automation_clear)
+    add_clip_automation_device_args(stock_automation_clear)
+    add_stock_root_arg(stock_automation_clear)
+    stock_automation_clear.add_argument("--stock-device", help="Registry device name/path/slug. Defaults to --device when that is a name.")
+    stock_automation_clear.add_argument("--control", help="Control name, slug, alias, or parameter index. Omit with --all.")
+    stock_automation_clear.add_argument("--all", action="store_true", help="Clear every automation envelope in the clip.")
 
     clip_delete = sub.add_parser("clip-delete", help="Delete a clip by path, Session slot, or Arrangement index/start.")
     add_clip_ref_args(clip_delete)
@@ -1049,7 +1142,130 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
     raise SystemExit(f"Unknown command: {command}")
 
 
+def stock_device_listing(device: dict[str, Any], include_controls: bool = False) -> dict[str, Any]:
+    listed = {key: value for key, value in device.items() if key != "controls"}
+    listed["control_count"] = len(device.get("controls", []))
+    if include_controls:
+        listed["controls"] = device.get("controls", [])
+    return listed
+
+
+def stock_device_query_text(device: dict[str, Any]) -> str:
+    fields = [
+        device.get("name"),
+        device.get("path"),
+        device.get("slug"),
+        device.get("root"),
+        device.get("class_name"),
+        device.get("loaded_name"),
+    ]
+    return normalize(" ".join(str(field) for field in fields if field))
+
+
+def stock_registry_device_identifier(args: argparse.Namespace) -> Any:
+    if getattr(args, "stock_device", None):
+        return args.stock_device
+    device = getattr(args, "device", None)
+    if device is not None and not isinstance(device, int):
+        return device
+    raise SystemExit("Command needs --stock-device when --device is numeric or --device-path is used.")
+
+
+def resolve_stock_control(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    registry = load_registry(args.registry)
+    device = find_device(registry, stock_registry_device_identifier(args), getattr(args, "root", None))
+    control = find_control(device, args.control)
+    return registry, device, control
+
+
+def stock_value_payload(args: argparse.Namespace) -> dict[str, float]:
+    if getattr(args, "value", None) is not None:
+        return {"value": args.value}
+    if getattr(args, "normalized", None) is not None:
+        return {"normalized": args.normalized}
+    return {"delta": args.delta}
+
+
+def send_local_bridge_command(args: argparse.Namespace, payload: dict[str, Any]) -> dict[str, Any]:
+    response = send(payload, args.host, args.port, args.timeout)
+    return response.get("result", response)
+
+
 def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
+    if args.command == "stock-devices":
+        registry = load_registry(args.registry)
+        if args.summary:
+            return registry_summary(registry)
+        devices = iter_devices(registry, args.root)
+        if args.query:
+            needle = normalize(args.query)
+            devices = [device for device in devices if needle in stock_device_query_text(device)]
+        return {
+            "summary": registry_summary(registry),
+            "count": len(devices),
+            "devices": [stock_device_listing(device, args.controls) for device in devices],
+        }
+    if args.command == "stock-controls":
+        registry = load_registry(args.registry)
+        device = find_device(registry, args.device, args.root)
+        if args.control:
+            control = find_control(device, args.control)
+            return {"device": stock_device_listing(device, False), "control": control}
+        return {"device": stock_device_listing(device, False), "controls": device.get("controls", [])}
+    if args.command == "stock-coverage":
+        return verify_registry(load_registry(args.registry))
+    if args.command == "set-stock-control":
+        _registry, device, control = resolve_stock_control(args)
+        payload = {
+            "command": "set_param",
+            **device_ref_payload(args),
+            "param": control_parameter_name(control),
+            **stock_value_payload(args),
+        }
+        result = send_local_bridge_command(args, payload)
+        result["stock_device"] = stock_device_listing(device, False)
+        result["stock_control"] = control
+        return result
+    if args.command == "clip-stock-automation-get":
+        _registry, device, control = resolve_stock_control(args)
+        payload = {
+            "command": "clip_automation_get",
+            **clip_ref_payload(args),
+            **clip_automation_device_ref_payload(args),
+            "param": control_parameter_name(control),
+            "times": args.times or [],
+        }
+        result = send_local_bridge_command(args, payload)
+        result["stock_device"] = stock_device_listing(device, False)
+        result["stock_control"] = control
+        return result
+    if args.command == "clip-stock-automation-set":
+        _registry, device, control = resolve_stock_control(args)
+        payload = {
+            "command": "clip_automation_set",
+            **clip_ref_payload(args),
+            **clip_automation_device_ref_payload(args),
+            "param": control_parameter_name(control),
+            "steps": args.steps,
+            "clear": args.clear,
+        }
+        result = send_local_bridge_command(args, payload)
+        result["stock_device"] = stock_device_listing(device, False)
+        result["stock_control"] = control
+        return result
+    if args.command == "clip-stock-automation-clear":
+        payload = {"command": "clip_automation_clear", **clip_ref_payload(args)}
+        if args.all:
+            payload["all"] = True
+            return send_local_bridge_command(args, payload)
+        if not args.control:
+            raise SystemExit("clip-stock-automation-clear needs --control or --all.")
+        _registry, device, control = resolve_stock_control(args)
+        payload.update({**clip_automation_device_ref_payload(args), "param": control_parameter_name(control)})
+        result = send_local_bridge_command(args, payload)
+        result["stock_device"] = stock_device_listing(device, False)
+        result["stock_control"] = control
+        return result
     if args.command == "save":
         run_hotkey(args.app, "cmd+s", args.delay)
         return {"command": "save", "app": args.app, "hotkey": "cmd+s", "done": True}
@@ -1172,12 +1388,15 @@ def scalar_value(value: str) -> Any:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command in LOCAL_COMMANDS:
-        print_json(run_local_command(args))
-        return 0
-    payload = command_payload(args)
-    response = send(payload, args.host, args.port, args.timeout)
-    print_json(response.get("result", response))
+    try:
+        if args.command in LOCAL_COMMANDS:
+            print_json(run_local_command(args))
+            return 0
+        payload = command_payload(args)
+        response = send(payload, args.host, args.port, args.timeout)
+        print_json(response.get("result", response))
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc))
     return 0
 
 

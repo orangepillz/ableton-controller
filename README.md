@@ -101,6 +101,27 @@ python3 abletonctl.py set-param --track "Synth" --device "EQ Eight" --param "1 F
 python3 abletonctl.py set-param --device-path "song.tracks[30].devices[0].chains[0].devices[0]" --param Threshold --normalized 0.35
 ```
 
+The repository also includes a generated Live 12 stock-device controls registry
+at `data/stock_device_controls.live12.json`. It is generated from Live's own
+browser and loaded-device parameter lists, so each Built-in instrument, audio
+effect, and MIDI effect has explicit control names, ranges, value items, and
+aliases:
+
+```sh
+python3 abletonctl.py stock-devices --summary
+python3 abletonctl.py stock-devices --root audio_effects --query filter
+python3 abletonctl.py stock-controls --device "Auto Filter"
+python3 abletonctl.py stock-controls --device "EQ Eight" --control "1 Frequency A"
+python3 abletonctl.py set-stock-control --track "Synth" --device "Auto Filter" --control frequency --normalized 0.5
+```
+
+Refresh the registry after updating Live:
+
+```sh
+python3 scripts/generate_stock_device_controls.py --output data/stock_device_controls.live12.json
+python3 abletonctl.py stock-coverage
+```
+
 Inspect and use raw Live Object Model paths:
 
 ```sh
@@ -195,6 +216,8 @@ Automate device parameters inside Session or Arrangement clips:
 python3 abletonctl.py clip-automation-set --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.15},{"time":1,"duration":1,"normalized":0.85}]'
 python3 abletonctl.py clip-automation-get --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency --times 0,0.25,1.25
 python3 abletonctl.py clip-automation-clear --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency
+python3 abletonctl.py clip-stock-automation-set --track "Codex MIDI" --slot 0 --device Pitch --stock-device "midi_effects/Pitch" --control Pitch --clear --steps '[{"time":0,"duration":1,"value":12},{"time":1,"duration":1,"value":-12}]'
+python3 abletonctl.py clip-stock-automation-get --track "Codex MIDI" --slot 0 --device Pitch --stock-device "midi_effects/Pitch" --control Pitch --times 0,0.5,1.5
 ```
 
 Automation steps accept raw `value` or normalized `0..1` values. Nested rack devices can
