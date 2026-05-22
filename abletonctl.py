@@ -142,6 +142,71 @@ def build_parser() -> argparse.ArgumentParser:
     lom_inspect = sub.add_parser("lom-inspect", help="Inspect attributes and methods at a Live Object Model path.")
     lom_inspect.add_argument("path")
 
+    show_view = sub.add_parser("show-view", help="Show a Live view, e.g. Browser, Session, Arranger, Detail/Clip.")
+    show_view.add_argument("view")
+
+    hide_view = sub.add_parser("hide-view", help="Hide a Live view.")
+    hide_view.add_argument("view")
+
+    focus_view = sub.add_parser("focus-view", help="Focus a Live view.")
+    focus_view.add_argument("view")
+
+    sub.add_parser("toggle-browse", help="Toggle Live browser browse mode.")
+
+    sub.add_parser("browser-roots", help="List available browser roots.")
+
+    browser_children = sub.add_parser("browser-children", help="List browser children by path, e.g. 'audio_effects/EQ Eight'.")
+    browser_children.add_argument("item")
+
+    browser_load = sub.add_parser("browser-load", help="Load a browser item into Live by path.")
+    browser_load.add_argument("item")
+
+    browser_preview = sub.add_parser("browser-preview", help="Preview a browser item by path.")
+    browser_preview.add_argument("item")
+
+    sub.add_parser("browser-stop-preview", help="Stop browser preview playback.")
+
+    create_track = sub.add_parser("create-track", help="Create an audio, MIDI, or return track.")
+    create_track.add_argument("--type", choices=("audio", "midi", "return"), default="midi")
+    create_track.add_argument("--index", type=int)
+    create_track.add_argument("--name")
+
+    delete_track = sub.add_parser("delete-track", help="Delete a track by index or name.")
+    delete_track.add_argument("--track", required=True, type=track_value)
+
+    duplicate_track = sub.add_parser("duplicate-track", help="Duplicate a regular track by index or name.")
+    duplicate_track.add_argument("--track", required=True, type=track_value)
+
+    create_scene = sub.add_parser("create-scene", help="Create a scene.")
+    create_scene.add_argument("--index", type=int)
+    create_scene.add_argument("--name")
+
+    delete_scene = sub.add_parser("delete-scene", help="Delete a scene by index.")
+    delete_scene.add_argument("--scene", required=True, type=int)
+
+    duplicate_scene = sub.add_parser("duplicate-scene", help="Duplicate a scene by index.")
+    duplicate_scene.add_argument("--scene", required=True, type=int)
+
+    fire_scene = sub.add_parser("fire-scene", help="Fire a scene by index or name.")
+    fire_scene.add_argument("--scene", required=True, type=track_value)
+
+    set_routing = sub.add_parser("set-routing", help="Set track input/output routing by displayed routing name.")
+    set_routing.add_argument("--track", required=True, type=track_value)
+    set_routing.add_argument("--direction", choices=("input", "output"), default="input")
+    set_routing.add_argument("--type")
+    set_routing.add_argument("--channel")
+
+    midi_get = sub.add_parser("midi-get-notes", help="Read notes from a MIDI clip by track/slot or LOM clip path.")
+    midi_get.add_argument("--path")
+    midi_get.add_argument("--track", type=track_value)
+    midi_get.add_argument("--slot", type=int, default=0)
+
+    midi_add = sub.add_parser("midi-add-notes", help="Add notes to a MIDI clip from a JSON list.")
+    midi_add.add_argument("--path")
+    midi_add.add_argument("--track", type=track_value)
+    midi_add.add_argument("--slot", type=int, default=0)
+    midi_add.add_argument("--notes", required=True, help="JSON list of note objects with pitch/start_time/duration/velocity.")
+
     clip_slots = sub.add_parser("clip-slots", help="List clip slots for a track.")
     clip_slots.add_argument("--track", required=True, type=track_value)
 
@@ -226,6 +291,75 @@ def command_payload(args: argparse.Namespace) -> dict[str, Any]:
         return {"command": "lom_call", "path": args.path, "args": call_args, "kwargs": call_kwargs}
     if command == "lom-inspect":
         return {"command": "lom_inspect", "path": args.path}
+    if command in {"show-view", "hide-view", "focus-view"}:
+        return {"command": "view", "action": command.split("-", 1)[0], "view": args.view}
+    if command == "toggle-browse":
+        return {"command": "view", "action": "toggle-browse"}
+    if command == "browser-roots":
+        return {"command": "browser_roots"}
+    if command == "browser-children":
+        return {"command": "browser_children", "item": args.item}
+    if command == "browser-load":
+        return {"command": "browser_load", "item": args.item}
+    if command == "browser-preview":
+        return {"command": "browser_preview", "item": args.item}
+    if command == "browser-stop-preview":
+        return {"command": "browser_stop_preview"}
+    if command == "create-track":
+        payload = {"command": "create_track", "type": args.type}
+        if args.index is not None:
+            payload["index"] = args.index
+        if args.name:
+            payload["name"] = args.name
+        return payload
+    if command == "delete-track":
+        return {"command": "delete_track", "track": args.track}
+    if command == "duplicate-track":
+        return {"command": "duplicate_track", "track": args.track}
+    if command == "create-scene":
+        payload = {"command": "create_scene"}
+        if args.index is not None:
+            payload["index"] = args.index
+        if args.name:
+            payload["name"] = args.name
+        return payload
+    if command == "delete-scene":
+        return {"command": "delete_scene", "scene": args.scene}
+    if command == "duplicate-scene":
+        return {"command": "duplicate_scene", "scene": args.scene}
+    if command == "fire-scene":
+        return {"command": "fire_scene", "scene": args.scene}
+    if command == "set-routing":
+        if args.type is None and args.channel is None:
+            raise SystemExit("set-routing needs --type, --channel, or both.")
+        payload = {"command": "set_routing", "track": args.track, "direction": args.direction}
+        if args.type is not None:
+            payload["type"] = args.type
+        if args.channel is not None:
+            payload["channel"] = args.channel
+        return payload
+    if command == "midi-get-notes":
+        if not args.path and args.track is None:
+            raise SystemExit("midi-get-notes needs --path or --track.")
+        payload = {"command": "midi_get_notes", "slot": args.slot}
+        if args.path:
+            payload["path"] = args.path
+        if args.track is not None:
+            payload["track"] = args.track
+        return payload
+    if command == "midi-add-notes":
+        if not args.path and args.track is None:
+            raise SystemExit("midi-add-notes needs --path or --track.")
+        try:
+            notes = json.loads(args.notes)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid notes JSON: {exc}")
+        payload = {"command": "midi_add_notes", "slot": args.slot, "notes": notes}
+        if args.path:
+            payload["path"] = args.path
+        if args.track is not None:
+            payload["track"] = args.track
+        return payload
     if command == "clip-slots":
         return {"command": "clip_slots", "track": args.track}
     if command == "fire-clip":

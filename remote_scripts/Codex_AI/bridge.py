@@ -7,6 +7,11 @@ import traceback
 
 from _Framework.ControlSurface import ControlSurface
 
+try:
+    import Live
+except Exception:
+    Live = None
+
 
 HOST = "127.0.0.1"
 PORT = 37337
@@ -159,6 +164,58 @@ class CodexBridge(ControlSurface):
             return self._lom_call(payload)
         if command == "lom_inspect":
             return self._lom_inspect(payload)
+        if command == "view":
+            return self._view_command(payload)
+        if command == "browser_roots":
+            return self._browser_roots()
+        if command == "browser_children":
+            return self._browser_children(payload)
+        if command == "browser_load":
+            return self._browser_item_action(payload, "load")
+        if command == "browser_preview":
+            return self._browser_item_action(payload, "preview")
+        if command == "browser_stop_preview":
+            self.application().browser.stop_preview()
+            return {"done": True}
+        if command == "create_track":
+            return self._create_track(payload)
+        if command == "delete_track":
+            track = self._resolve_track(payload.get("track"))
+            index = self._track_index(track)
+            name = self._safe_get(track, "name")
+            if self._track_kind(track) == "return":
+                self.song().delete_return_track(index)
+            elif self._track_kind(track) == "master":
+                raise ValueError("Cannot delete the master track")
+            else:
+                self.song().delete_track(index)
+            return {"deleted_index": index, "deleted_track": name, "done": True}
+        if command == "duplicate_track":
+            track = self._resolve_track(payload.get("track"))
+            if self._track_kind(track) != "track":
+                raise ValueError("Only regular tracks can be duplicated")
+            self.song().duplicate_track(self._track_index(track))
+            return {"source": track.name, "done": True}
+        if command == "create_scene":
+            return self._create_scene(payload)
+        if command == "delete_scene":
+            index = int(payload.get("scene"))
+            self.song().delete_scene(index)
+            return {"deleted_scene": index, "done": True}
+        if command == "duplicate_scene":
+            index = int(payload.get("scene"))
+            self.song().duplicate_scene(index)
+            return {"source_scene": index, "done": True}
+        if command == "fire_scene":
+            scene = self._resolve_scene(payload.get("scene"))
+            scene.fire()
+            return {"scene": self._scene_info(scene, self._scene_index(scene)), "done": True}
+        if command == "set_routing":
+            return self._set_routing(payload)
+        if command == "midi_get_notes":
+            return self._midi_get_notes(payload)
+        if command == "midi_add_notes":
+            return self._midi_add_notes(payload)
         if command == "clip_slots":
             return self._clip_slots(payload)
         if command == "fire_clip":
@@ -257,6 +314,252 @@ class CodexBridge(ControlSurface):
             raise ValueError("Clip slot index out of range: %s" % slot_index)
         slots[slot_index].fire()
         return {"track": track.name, "slot": slot_index, "done": True}
+
+    def _view_command(self, payload):
+        action = str(payload.get("action", "show"))
+        view = payload.get("view")
+        app_view = self.application().view
+        if action == "toggle-browse":
+            app_view.toggle_browse()
+            return {"browse_mode": app_view.browse_mode}
+        if not view:
+            raise ValueError("view is required")
+        if action == "show":
+            app_view.show_view(str(view))
+            return {"view": view, "visible": app_view.is_view_visible(str(view))}
+        if action == "hide":
+            app_view.hide_view(str(view))
+            return {"view": view, "visible": app_view.is_view_visible(str(view))}
+        if action == "focus":
+            app_view.focus_view(str(view))
+            return {"focused_document_view": app_view.focused_document_view}
+        if action == "zoom":
+            app_view.zoom_view(int(payload.get("direction", 0)), str(view), bool(payload.get("alt", False)))
+            return {"view": view, "done": True}
+        if action == "scroll":
+            app_view.scroll_view(int(payload.get("direction", 0)), str(view), bool(payload.get("alt", False)))
+            return {"view": view, "done": True}
+        raise ValueError("Unknown view action: %r" % action)
+
+    def _browser_roots(self):
+        roots = []
+        for name in self._browser_root_names():
+            roots.append({"path": name, "item": self._browser_item_info(getattr(self.application().browser, name))})
+        return {"roots": roots}
+
+    def _browser_children(self, payload):
+        item = self._resolve_browser_item(payload.get("item"))
+        children = list(item.children) if self._is_indexable_vector(item.children) else []
+        return {
+            "item": self._browser_item_info(item),
+            "children": [{"path": self._browser_child_path(payload.get("item"), child), "item": self._browser_item_info(child)} for child in children],
+        }
+
+    def _browser_item_action(self, payload, action):
+        item = self._resolve_browser_item(payload.get("item"))
+        browser = self.application().browser
+        if action == "load":
+            browser.load_item(item)
+        elif action == "preview":
+            browser.preview_item(item)
+        else:
+            raise ValueError("Unknown browser action: %r" % action)
+        return {"action": action, "item": self._browser_item_info(item), "done": True}
+
+    def _browser_root_names(self):
+        return [
+            "sounds",
+            "drums",
+            "instruments",
+            "audio_effects",
+            "midi_effects",
+            "max_for_live",
+            "plugins",
+            "clips",
+            "samples",
+            "packs",
+            "user_library",
+            "current_project",
+        ]
+
+    def _resolve_browser_item(self, identifier):
+        if not identifier:
+            raise ValueError("Browser item path is required")
+        text = str(identifier).strip()
+        if text.startswith("application.browser."):
+            item = self._resolve_lom_path(text)
+            if not hasattr(item, "is_loadable") and not hasattr(item, "children"):
+                raise ValueError("Path did not resolve to a browser item: %r" % text)
+            return item
+
+        parts = [part.strip() for part in re.split(r"\s*/\s*|\s*>\s*", text) if part.strip()]
+        if not parts:
+            raise ValueError("Browser item path is required")
+
+        browser = self.application().browser
+        root = None
+        normalized = self._normalize_name(parts[0])
+        for name in self._browser_root_names():
+            item = getattr(browser, name)
+            if normalized in (self._normalize_name(name), self._normalize_name(item.name)):
+                root = item
+                break
+        if root is None:
+            raise ValueError("Unknown browser root: %r" % parts[0])
+
+        item = root
+        for part in parts[1:]:
+            item = self._find_named_child(item, part)
+        return item
+
+    def _find_named_child(self, item, name):
+        normalized = self._normalize_name(name)
+        matches = [
+            child
+            for child in list(item.children)
+            if normalized in self._normalize_name(getattr(child, "name", ""))
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise ValueError("Ambiguous browser item %r: %s" % (name, [child.name for child in matches]))
+        raise ValueError("No child named %r under %s" % (name, item.name))
+
+    def _browser_child_path(self, parent_identifier, child):
+        if not parent_identifier:
+            return child.name
+        return "%s/%s" % (str(parent_identifier).rstrip("/"), child.name)
+
+    def _browser_item_info(self, item):
+        children_count = None
+        try:
+            children_count = len(item.children)
+        except Exception:
+            pass
+        return {
+            "name": self._safe_get(item, "name"),
+            "uri": self._safe_get(item, "uri"),
+            "source": self._safe_get(item, "source"),
+            "is_device": self._safe_get(item, "is_device"),
+            "is_folder": self._safe_get(item, "is_folder"),
+            "is_loadable": self._safe_get(item, "is_loadable"),
+            "is_selected": self._safe_get(item, "is_selected"),
+            "children_count": children_count,
+        }
+
+    def _create_track(self, payload):
+        kind = str(payload.get("type", "midi")).lower()
+        index = payload.get("index")
+        args = [] if index is None else [int(index)]
+        if kind == "audio":
+            track = self.song().create_audio_track(*args)
+        elif kind == "midi":
+            track = self.song().create_midi_track(*args)
+        elif kind == "return":
+            track = self.song().create_return_track(*args)
+        else:
+            raise ValueError("Track type must be audio, midi, or return")
+        if payload.get("name"):
+            track.name = str(payload.get("name"))
+        return self._track_info(track, self._track_index(track), self._track_kind(track))
+
+    def _create_scene(self, payload):
+        index = payload.get("index")
+        scene = self.song().create_scene() if index is None else self.song().create_scene(int(index))
+        if payload.get("name"):
+            scene.name = str(payload.get("name"))
+        return self._scene_info(scene, self._scene_index(scene))
+
+    def _set_routing(self, payload):
+        track = self._resolve_track(payload.get("track"))
+        direction = str(payload.get("direction", "input")).lower()
+        if direction not in ("input", "output"):
+            raise ValueError("direction must be input or output")
+        result = {"track": track.name, "direction": direction}
+        route_type = payload.get("type")
+        route_channel = payload.get("channel")
+        if route_type is not None:
+            setattr(track, "%s_routing_type" % direction, self._match_routing(getattr(track, "available_%s_routing_types" % direction), route_type))
+            result["type"] = self._safe_get(track, "current_%s_routing" % direction)
+        if route_channel is not None:
+            setattr(track, "%s_routing_channel" % direction, self._match_routing(getattr(track, "available_%s_routing_channels" % direction), route_channel))
+            result["channel"] = self._safe_get(track, "current_%s_sub_routing" % direction)
+        return result
+
+    def _match_routing(self, values, requested):
+        normalized = self._normalize_name(requested)
+        matches = [value for value in list(values) if normalized in self._normalize_name(self._routing_name(value))]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise ValueError("Ambiguous routing %r: %s" % (requested, [self._routing_name(value) for value in matches]))
+        raise ValueError("No routing option named %r. Available: %s" % (requested, [self._routing_name(value) for value in list(values)]))
+
+    def _routing_name(self, value):
+        for name in ("display_name", "name", "identifier"):
+            found = self._safe_get(value, name)
+            if found:
+                return found
+        return str(value)
+
+    def _midi_get_notes(self, payload):
+        clip = self._resolve_clip(payload)
+        if not self._safe_get(clip, "is_midi_clip", False):
+            raise ValueError("Clip is not a MIDI clip")
+        try:
+            notes = clip.get_all_notes_extended()
+        except TypeError:
+            notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
+        return {"clip": self._clip_info(clip), "notes": self._serialize(notes)}
+
+    def _midi_add_notes(self, payload):
+        if Live is None:
+            raise ValueError("Live module is not available")
+        clip = self._resolve_clip(payload)
+        if not self._safe_get(clip, "is_midi_clip", False):
+            raise ValueError("Clip is not a MIDI clip")
+        notes = payload.get("notes", [])
+        if not isinstance(notes, list):
+            raise ValueError("notes must be a list")
+        specifications = tuple(self._midi_note_spec(note) for note in notes)
+        clip.add_new_notes(specifications)
+        return self._midi_get_notes(payload)
+
+    def _midi_note_spec(self, note):
+        if not isinstance(note, dict):
+            raise ValueError("Each note must be an object")
+        data = {
+            "pitch": int(note["pitch"]),
+            "start_time": float(note.get("start_time", note.get("start", 0.0))),
+            "duration": float(note.get("duration", 1.0)),
+            "velocity": float(note.get("velocity", 100.0)),
+            "mute": bool(note.get("mute", False)),
+            "probability": float(note.get("probability", 1.0)),
+            "velocity_deviation": float(note.get("velocity_deviation", 0.0)),
+            "release_velocity": float(note.get("release_velocity", 64.0)),
+        }
+        spec_class = Live.Clip.MidiNoteSpecification
+        try:
+            return spec_class(**data)
+        except TypeError:
+            spec = spec_class()
+            for key, value in data.items():
+                setattr(spec, key, value)
+            return spec
+
+    def _resolve_clip(self, payload):
+        if payload.get("path"):
+            clip = self._resolve_lom_path(payload.get("path"))
+        else:
+            track = self._resolve_track(payload.get("track"))
+            slot_index = int(payload.get("slot", 0))
+            slot = list(track.clip_slots)[slot_index]
+            if not slot.has_clip:
+                raise ValueError("Clip slot %s on %s has no clip" % (slot_index, track.name))
+            clip = slot.clip
+        if not hasattr(clip, "is_audio_clip") and not hasattr(clip, "is_midi_clip"):
+            raise ValueError("Path did not resolve to a clip")
+        return clip
 
     def _status(self):
         song = self.song()
@@ -551,6 +854,7 @@ class CodexBridge(ControlSurface):
         return {
             "name": clip.name,
             "color": self._safe_get(clip, "color"),
+            "color_index": self._safe_get(clip, "color_index"),
             "is_audio_clip": self._safe_get(clip, "is_audio_clip"),
             "is_midi_clip": self._safe_get(clip, "is_midi_clip"),
             "looping": self._safe_get(clip, "looping"),
@@ -562,6 +866,21 @@ class CodexBridge(ControlSurface):
             "pitch_coarse": self._safe_get(clip, "pitch_coarse"),
             "pitch_fine": self._safe_get(clip, "pitch_fine"),
             "warping": self._safe_get(clip, "warping"),
+        }
+
+    def _scene_info(self, scene, index):
+        return {
+            "index": index,
+            "name": scene.name,
+            "color": self._safe_get(scene, "color"),
+            "color_index": self._safe_get(scene, "color_index"),
+            "is_empty": self._safe_get(scene, "is_empty"),
+            "is_triggered": self._safe_get(scene, "is_triggered"),
+            "tempo": self._safe_get(scene, "tempo"),
+            "tempo_enabled": self._safe_get(scene, "tempo_enabled"),
+            "time_signature_enabled": self._safe_get(scene, "time_signature_enabled"),
+            "time_signature_numerator": self._safe_get(scene, "time_signature_numerator"),
+            "time_signature_denominator": self._safe_get(scene, "time_signature_denominator"),
         }
 
     def _parameter_infos(self, device):
@@ -590,6 +909,14 @@ class CodexBridge(ControlSurface):
             return value
         if isinstance(value, (list, tuple)):
             return [self._serialize(item) for item in list(value)[:512]]
+        if self._is_indexable_vector(value):
+            length = len(value)
+            return {
+                "type": type(value).__name__,
+                "length": length,
+                "items": [self._serialize(value[index]) for index in range(min(length, 512))],
+                "truncated": length > 512,
+            }
         if hasattr(value, "min") and hasattr(value, "max") and hasattr(value, "value"):
             return self._parameter_info(value)
         if hasattr(value, "clip_slots") and hasattr(value, "mixer_device"):
@@ -598,12 +925,32 @@ class CodexBridge(ControlSurface):
             return self._device_info(value, -1)
         if hasattr(value, "is_audio_clip") or hasattr(value, "is_midi_clip"):
             return self._clip_info(value)
+        if hasattr(value, "is_loadable") and hasattr(value, "children"):
+            return {"type": type(value).__name__, "item": self._browser_item_info(value)}
+        if hasattr(value, "pitch") and hasattr(value, "start_time"):
+            return self._note_info(value)
         return {"type": type(value).__name__, "summary": self._summary(value)}
+
+    def _note_info(self, note):
+        keys = (
+            "note_id",
+            "pitch",
+            "start_time",
+            "duration",
+            "velocity",
+            "velocity_deviation",
+            "release_velocity",
+            "probability",
+            "mute",
+        )
+        return {key: self._safe_get(note, key) for key in keys if self._safe_get(note, key) is not None}
 
     def _summary(self, value):
         if value is None or isinstance(value, (bool, int, float, str)):
             return value
         if isinstance(value, (list, tuple)):
+            return {"type": type(value).__name__, "length": len(value)}
+        if self._is_indexable_vector(value):
             return {"type": type(value).__name__, "length": len(value)}
         name = self._safe_get(value, "name")
         class_name = self._safe_get(value, "class_name")
@@ -630,6 +977,29 @@ class CodexBridge(ControlSurface):
             return "return"
         return "track"
 
+    def _resolve_scene(self, identifier):
+        scenes = list(self.song().scenes)
+        if isinstance(identifier, int):
+            if 0 <= identifier < len(scenes):
+                return scenes[identifier]
+            raise ValueError("Scene index out of range: %s" % identifier)
+        text = str(identifier).strip()
+        if text.isdigit():
+            return self._resolve_scene(int(text))
+        normalized = self._normalize_name(text)
+        matches = [scene for scene in scenes if normalized in self._normalize_name(scene.name)]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise ValueError("Scene %r is ambiguous: %s" % (identifier, [scene.name for scene in matches]))
+        raise ValueError("Unknown scene: %r" % identifier)
+
+    def _scene_index(self, scene):
+        for index, candidate in enumerate(self.song().scenes):
+            if candidate == scene:
+                return index
+        return 0
+
     def _normalize_name(self, value):
         return "".join(character.lower() for character in str(value) if character.isalnum())
 
@@ -638,3 +1008,8 @@ class CodexBridge(ControlSurface):
             return getattr(obj, name)
         except Exception:
             return default
+
+    def _is_indexable_vector(self, value):
+        if isinstance(value, (bytes, str)):
+            return False
+        return hasattr(value, "__len__") and hasattr(value, "__getitem__")

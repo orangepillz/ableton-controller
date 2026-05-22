@@ -71,6 +71,47 @@ Set a device parameter:
 python3 abletonctl.py set-param --track "Synth" --device "EQ Eight" --param "1 Frequency A" --value 180
 ```
 
+Inspect and use raw Live Object Model paths:
+
+```sh
+python3 abletonctl.py lom-inspect song
+python3 abletonctl.py lom-get song.tempo
+python3 abletonctl.py lom-set song.metronome true
+python3 abletonctl.py lom-call song.tap_tempo
+```
+
+Browse and load Live content:
+
+```sh
+python3 abletonctl.py browser-roots
+python3 abletonctl.py browser-children audio_effects
+python3 abletonctl.py browser-load "audio_effects/EQ Eight"
+```
+
+Show, hide, or focus Live views:
+
+```sh
+python3 abletonctl.py show-view Browser
+python3 abletonctl.py focus-view Session
+python3 abletonctl.py hide-view Detail
+```
+
+Create scenes/tracks and work with Session clips:
+
+```sh
+python3 abletonctl.py create-track --type midi --name "Codex MIDI"
+python3 abletonctl.py create-scene --name "Drop"
+python3 abletonctl.py clip-slots --track "Codex MIDI"
+python3 abletonctl.py fire-scene --scene "Drop"
+```
+
+Read and write MIDI notes in a MIDI clip:
+
+```sh
+python3 abletonctl.py midi-add-notes --track "Codex MIDI" --slot 0 --notes '[{"pitch":60,"start_time":0,"duration":1,"velocity":96}]'
+python3 abletonctl.py midi-get-notes --track "Codex MIDI" --slot 0
+```
+
 Send a raw JSON command:
 
 ```sh
@@ -97,4 +138,5 @@ To regenerate the audit seed after downloading the manual PDF:
 ```sh
 python3 -m pip install -r requirements.txt
 python3 scripts/audit_manual.py extract
+python3 scripts/update_audit_coverage.py
 ```
