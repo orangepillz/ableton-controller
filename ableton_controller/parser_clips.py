@@ -1,6 +1,7 @@
 """Parser setup for clip commands."""
 
 from .arg_types import bool_arg, float_list_arg, json_arg, track_value, warp_mode_value
+from .arrangement_automation import CURVE_PRESETS
 from .parser_args import add_clip_automation_device_args, add_clip_range_args, add_clip_ref_args, add_registry_arg, add_stock_root_arg
 
 def add_clip_commands(sub):
@@ -84,12 +85,52 @@ def add_clip_commands(sub):
     automation_get.add_argument("--param", required=True, type=track_value)
     automation_get.add_argument("--times", type=float_list_arg, help="Comma-separated or JSON list of clip times to sample.")
 
-    automation_set = sub.add_parser("clip-automation-set", help="Create/update a clip automation envelope with step values.")
+    automation_set = sub.add_parser("clip-automation-set", help="Create/update a clip automation envelope with steps or breakpoint events.")
     add_clip_ref_args(automation_set)
     add_clip_automation_device_args(automation_set)
     automation_set.add_argument("--param", required=True, type=track_value)
-    automation_set.add_argument("--steps", required=True, type=json_arg, help="JSON list of {time,duration,value|normalized} objects.")
-    automation_set.add_argument("--clear", action="store_true", help="Clear this parameter's existing envelope before inserting steps.")
+    automation_set.add_argument("--steps", type=json_arg, help="JSON list of {time,duration,value|normalized} objects.")
+    automation_set.add_argument("--events", type=json_arg, help="JSON list of breakpoint {time,value|normalized,curve_coefficients?} objects.")
+    automation_set.add_argument("--clear", action="store_true", help="Clear this parameter's existing envelope before inserting automation.")
+
+    arrangement_automation_get = sub.add_parser("arrangement-automation-get", help="Read an Arrangement clip automation lane.")
+    arrangement_automation_get.add_argument("--track", required=True, type=track_value)
+    arrangement_automation_get.add_argument("--arrangement-start", required=True, type=float)
+    add_clip_automation_device_args(arrangement_automation_get)
+    arrangement_automation_get.add_argument("--param", required=True, type=track_value)
+    arrangement_automation_get.add_argument("--times", type=float_list_arg, help="Comma-separated or JSON list of clip-relative times to sample.")
+
+    arrangement_automation_set = sub.add_parser("arrangement-automation-set", help="Write automation over an Arrangement clip range.")
+    arrangement_automation_set.add_argument("--track", required=True, type=track_value)
+    arrangement_automation_set.add_argument("--arrangement-start", required=True, type=float)
+    add_clip_automation_device_args(arrangement_automation_set)
+    arrangement_automation_set.add_argument("--param", required=True, type=track_value)
+    arrangement_automation_set.add_argument("--duration", type=float, help="Automation duration in clip beats.")
+    start_value = arrangement_automation_set.add_mutually_exclusive_group()
+    start_value.add_argument("--from-normalized", type=float, help="Starting 0..1 normalized value.")
+    start_value.add_argument("--from-value", type=float, help="Starting raw parameter value.")
+    end_value = arrangement_automation_set.add_mutually_exclusive_group()
+    end_value.add_argument("--to-normalized", type=float, help="Ending 0..1 normalized value for a generated ramp.")
+    end_value.add_argument("--to-value", type=float, help="Ending raw parameter value for a generated ramp.")
+    arrangement_automation_set.add_argument("--steps", type=int, default=8, help="Number of generated segments when an ending value is supplied.")
+    arrangement_automation_set.add_argument("--events", type=json_arg, help="JSON list of breakpoint {time,value|normalized,curve_coefficients?} objects.")
+    arrangement_automation_set.add_argument("--curve", choices=CURVE_PRESETS, help="Write two breakpoint events with this curve between them.")
+    arrangement_automation_set.add_argument("--curve-coefficients", type=json_arg, help="Bezier control object {x1,y1,x2,y2} for the first generated breakpoint.")
+    arrangement_automation_set.add_argument("--clear", action="store_true", help="Clear this parameter's existing envelope before inserting automation.")
+
+    arrangement_automation_set_many = sub.add_parser(
+        "arrangement-automation-set-many",
+        help="Write multiple Arrangement clip automation lanes in one pass.",
+    )
+    arrangement_automation_set_many.add_argument("--track", required=True, type=track_value)
+    arrangement_automation_set_many.add_argument("--arrangement-start", required=True, type=float)
+    add_clip_automation_device_args(arrangement_automation_set_many)
+    arrangement_automation_set_many.add_argument(
+        "--lanes",
+        required=True,
+        type=json_arg,
+        help="JSON list of lane specs with param plus steps, events, or duration/from/to ramp fields.",
+    )
 
     automation_clear = sub.add_parser("clip-automation-clear", help="Clear a clip automation envelope for one parameter or all parameters.")
     add_clip_ref_args(automation_clear)

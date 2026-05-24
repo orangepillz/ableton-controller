@@ -31,7 +31,7 @@ def restart_activate(args: argparse.Namespace) -> None:
             activate(args)
             print(f"Reopening {args.app_name}...")
             subprocess.run(["open", "-a", args.app_name], check=True)
-            print("Live reopened. Wait for startup, then run: python3 abletonctl.py ping")
+            print("Live reopened. Wait for startup, then run: abletonctl ping")
             return
     else:
         raise SystemExit("Could not determine whether the Live set has a saved path, so Live was not quit.")
@@ -45,4 +45,4 @@ def restart_activate(args: argparse.Namespace) -> None:
     activate(args)
     print(f"Reopening {args.app_name}...")
     subprocess.run(["open", "-a", args.app_name], check=True)
-    print("Live reopened. Wait for startup, then run: python3 abletonctl.py ping")
+    print("Live reopened. Wait for startup, then run: abletonctl ping")

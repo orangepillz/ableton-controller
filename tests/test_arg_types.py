@@ -5,6 +5,7 @@ from ableton_controller.arg_types import (
     bool_arg,
     float_list_arg,
     int_list_arg,
+    midi_note_value,
     scalar_value,
     track_value,
     warp_mode_value,
@@ -27,6 +28,22 @@ class ArgTypeTests(unittest.TestCase):
         self.assertEqual(int_list_arg("[4, 5]"), [4, 5])
         self.assertEqual(float_list_arg("0, 1.25"), [0.0, 1.25])
         self.assertEqual(float_list_arg("[2, 3.5]"), [2.0, 3.5])
+
+    def test_midi_note_value_accepts_numbers(self):
+        self.assertEqual(midi_note_value("36"), 36)
+        self.assertEqual(midi_note_value("127"), 127)
+
+    def test_midi_note_value_accepts_note_names(self):
+        self.assertEqual(midi_note_value("C1"), 36)
+        self.assertEqual(midi_note_value("C#1"), 37)
+        self.assertEqual(midi_note_value("Db1"), 37)
+        self.assertEqual(midi_note_value("G8"), 127)
+
+    def test_midi_note_value_rejects_invalid_values(self):
+        with self.assertRaises(argparse.ArgumentTypeError):
+            midi_note_value("H2")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            midi_note_value("128")
 
     def test_warp_mode_names_and_indexes(self):
         self.assertEqual(warp_mode_value("complex-pro"), 6)

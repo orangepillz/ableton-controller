@@ -31,6 +31,8 @@ class CommandDispatcherMixin(object):
             return self._device_move(payload)
         if command == "device_delete":
             return self._device_delete(payload)
+        if command == "drum_pad_load":
+            return self._drum_pad_load(payload)
         if command == "params":
             device = self._resolve_device_ref(payload)
             return {"device": self._device_info(device, self._device_index(device)), "parameters": self._parameter_infos(device)}
@@ -98,6 +100,10 @@ class CommandDispatcherMixin(object):
             scene = self._resolve_scene(payload.get("scene"))
             scene.fire()
             return {"scene": self._scene_info(scene, self._scene_index(scene)), "done": True}
+        if command == "locators":
+            return self._locators()
+        if command == "set_locator":
+            return self._set_locator(payload)
         if command == "set_routing":
             return self._set_routing(payload)
         if command == "midi_get_notes":
@@ -138,6 +144,12 @@ class CommandDispatcherMixin(object):
             return self._clip_automation_set(payload)
         if command == "clip_automation_clear":
             return self._clip_automation_clear(payload)
+        if command == "arrangement_automation_get":
+            return self._arrangement_automation_get(payload)
+        if command == "arrangement_automation_set":
+            return self._arrangement_automation_set(payload)
+        if command == "arrangement_automation_set_many":
+            return self._arrangement_automation_set_many(payload)
         if command == "clip_delete":
             return self._clip_delete(payload)
         if command == "clip_copy":

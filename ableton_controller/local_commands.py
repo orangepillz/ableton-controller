@@ -15,17 +15,80 @@ from stock_device_controls import (
     verify_registry,
 )
 
+from .als_automation import arrangement_file_get, arrangement_file_set
+from .arrangement_automation import arrangement_automation_events
+from .copilot_intent import match_copilot_intent
 from .local_automation import applescript_string, run_applescript, run_hotkey, run_menu_search
 from .payload_helpers import clip_automation_device_ref_payload, clip_ref_payload, device_ref_payload
+from .session_snapshot import collect_session_snapshot
 from .stock_cli import resolve_stock_control, stock_device_listing, stock_device_query_text, stock_value_payload
 from .transport import send
+from .workflow_macros import list_workflow_macros, render_workflow_macro
 
 def send_local_bridge_command(args: argparse.Namespace, payload: dict[str, Any]) -> dict[str, Any]:
     response = send(payload, args.host, args.port, args.timeout)
     return response.get("result", response)
 
 
+def arrangement_automation_get(args: argparse.Namespace) -> dict[str, Any]:
+    payload = {
+        "command": "arrangement_automation_get",
+        "track": args.track,
+        "arrangement_start": args.arrangement_start,
+        **clip_automation_device_ref_payload(args),
+        "param": args.param,
+        "times": args.times or [],
+    }
+    result = send_local_bridge_command(args, payload)
+    if result.get("has_automation") and not result.get("has_envelope") and payload["times"]:
+        result["values"] = sample_arrangement_automation_values(args, payload, result)
+        result["read_source"] = "client_playhead_sample"
+    return result
+
+
+def sample_arrangement_automation_values(args: argparse.Namespace, payload: dict[str, Any], result: dict[str, Any]) -> list[dict[str, Any]]:
+    original_time = send_local_bridge_command(args, {"command": "lom_get", "path": "song.current_song_time"})
+    location = result.get("location") if isinstance(result.get("location"), dict) else {}
+    clip_start = float(location.get("start_time", payload["arrangement_start"]))
+    sample_payload = dict(payload)
+    sample_payload["times"] = []
+    values = []
+    try:
+        for time_value in payload["times"]:
+            relative_time = float(time_value)
+            send_local_bridge_command(
+                args,
+                {"command": "lom_set", "path": "song.current_song_time", "value": clip_start + relative_time},
+            )
+            time.sleep(0.02)
+            sample = send_local_bridge_command(args, sample_payload)
+            parameter = sample.get("parameter") if isinstance(sample.get("parameter"), dict) else {}
+            values.append({"time": relative_time, "value": parameter.get("value")})
+    finally:
+        if original_time is not None:
+            send_local_bridge_command(args, {"command": "lom_set", "path": "song.current_song_time", "value": original_time})
+    return values
+
+
 def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
+    if args.command == "copilot-intent":
+        return match_copilot_intent(
+            args.query,
+            memory_path=args.memory,
+            limit=args.limit,
+            min_score=args.min_score,
+            include_inactive=args.include_inactive,
+        )
+    if args.command == "session-snapshot":
+        return collect_session_snapshot(args, lambda payload: send_local_bridge_command(args, payload))
+    if args.command == "workflow-macro":
+        if args.action == "list":
+            return list_workflow_macros()
+        return render_workflow_macro(args)
+    if args.command == "arrangement-automation-file-get":
+        return arrangement_file_get(args.set_file, args.track, args.arrangement_start, args.device, args.param)
+    if args.command == "arrangement-automation-file-set":
+        return arrangement_file_set(args.set_file, args, arrangement_automation_events(args))
     if args.command == "stock-devices":
         registry = load_registry(args.registry)
         if args.summary:
@@ -60,6 +123,8 @@ def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
         result["stock_device"] = stock_device_listing(device, False)
         result["stock_control"] = control
         return result
+    if args.command == "arrangement-automation-get":
+        return arrangement_automation_get(args)
     if args.command == "clip-stock-automation-get":
         _registry, device, control = resolve_stock_control(args)
         payload = {

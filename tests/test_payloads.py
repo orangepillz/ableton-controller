@@ -35,6 +35,30 @@ class PayloadTests(unittest.TestCase):
             },
         )
 
+    def test_drum_pad_load_payload_accepts_note_name(self):
+        self.assertEqual(
+            self.payload_for(
+                "drum-pad-load",
+                "--track",
+                "Drums",
+                "--device",
+                "Main Rack",
+                "--pad",
+                "C1",
+                "--item",
+                "samples/Kick.wav",
+                "--clear",
+            ),
+            {
+                "command": "drum_pad_load",
+                "track": "Drums",
+                "device": "Main Rack",
+                "pad": 36,
+                "item": "samples/Kick.wav",
+                "clear": True,
+            },
+        )
+
     def test_clip_create_midi_requires_length_for_session_clip(self):
         with self.assertRaises(SystemExit):
             self.payload_for("clip-create-midi", "--track", "Synth", "--slot", "0")
@@ -71,6 +95,17 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(payload["device"], "Auto Filter")
         self.assertEqual(payload["steps"], [{"time": 0, "duration": 1, "normalized": 0.2}])
         self.assertIs(payload["clear"], True)
+
+    def test_locator_payloads(self):
+        self.assertEqual(self.payload_for("locators"), {"command": "locators"})
+        self.assertEqual(
+            self.payload_for("set-locator", "--time", "64", "--name", "02 Main Drop"),
+            {"command": "set_locator", "time": 64.0, "name": "02 Main Drop"},
+        )
+        self.assertEqual(
+            self.payload_for("set-locator", "--locator", "2", "--name", "03 Break"),
+            {"command": "set_locator", "locator": 2, "name": "03 Break"},
+        )
 
     def test_midi_transform_requires_transform_option(self):
         with self.assertRaises(SystemExit):

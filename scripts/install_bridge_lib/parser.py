@@ -3,6 +3,7 @@
 import argparse
 
 from .config import DEFAULT_AGENT_DIR, DEFAULT_LAUNCH_AGENTS, DEFAULT_USER_LIBRARY, PROJECT_ROOT
+from .cli_link import DEFAULT_CLI_BIN_DIR, install_cli
 from .filesystem import activate, install
 from .midi_agent import install_midi_agent, uninstall_midi_agent
 from .restart import restart_activate
@@ -15,6 +16,12 @@ def build_parser() -> argparse.ArgumentParser:
     install_parser = sub.add_parser("install", help="Install Remote Script into Ableton User Library.")
     install_parser.add_argument("--user-library", default=str(DEFAULT_USER_LIBRARY))
     install_parser.set_defaults(func=install)
+
+    cli_parser = sub.add_parser("install-cli", help="Install the abletonctl command symlink into PATH.")
+    cli_parser.add_argument("--bin-dir", default=str(DEFAULT_CLI_BIN_DIR))
+    cli_parser.add_argument("--name", default="abletonctl")
+    cli_parser.add_argument("--force", action="store_true", help="Replace an existing non-directory path.")
+    cli_parser.set_defaults(func=install_cli)
 
     activate_parser = sub.add_parser("activate", help="Patch a Live Preferences.cfg control-surface slot.")
     activate_parser.add_argument("--live-version", default="Live 12.2.7")

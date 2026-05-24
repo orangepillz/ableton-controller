@@ -37,10 +37,10 @@ class AbletonProducerPlanTests(unittest.TestCase):
             ],
         }
 
-        rendered = self.module.render_plan(plan, Path("/tmp/abletonctl.py"), "python3")
+        rendered = self.module.render_plan(plan)
 
         self.assertIn("Summary: Create a bass clip.", rendered)
-        self.assertIn("python3 /tmp/abletonctl.py create-track --type midi --name 'Drop Bass'", rendered)
+        self.assertIn("abletonctl create-track --type midi --name 'Drop Bass'", rendered)
         self.assertIn("midi-add-notes", rendered)
 
     def test_unknown_command_is_error(self):
@@ -53,6 +53,25 @@ class AbletonProducerPlanTests(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertEqual(warnings, ["step 1: potentially destructive command 'clip-delete'"])
+
+    def test_lom_and_locator_mutations_warn(self):
+        _, errors, warnings = self.module.validate_plan(
+            {
+                "commands": [
+                    {"args": ["set-locator", "--time", 64, "--name", "02 Main Drop"]},
+                    {"args": ["lom-set", "song.tempo", 140]},
+                ]
+            }
+        )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            warnings,
+            [
+                "step 1: potentially destructive command 'set-locator'",
+                "step 2: potentially destructive command 'lom-set'",
+            ],
+        )
 
     def test_command_shorthand_rejects_non_list_flags(self):
         _, errors, _ = self.module.validate_plan({"commands": [{"command": "status", "flags": "--bad"}]})

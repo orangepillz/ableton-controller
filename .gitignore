@@ -6,3 +6,4 @@ data/*
 !data/
 !data/stock_device_controls.live12.json
 audit/
+.ableton-copilot/

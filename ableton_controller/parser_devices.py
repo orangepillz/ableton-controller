@@ -1,6 +1,6 @@
 """Parser setup for device commands."""
 
-from .arg_types import track_value
+from .arg_types import midi_note_value, track_value
 from .config import STOCK_DEVICE_ROOTS
 from .parser_args import add_container_ref_args, add_device_ref_args
 
@@ -28,6 +28,15 @@ def add_device_commands(sub):
 
     device_delete = sub.add_parser("device-delete", help="Delete a top-level or rack-chain device.")
     add_device_ref_args(device_delete)
+
+    drum_pad_load = sub.add_parser("drum-pad-load", help="Load a browser item onto a Drum Rack pad.")
+    rack_ref = drum_pad_load.add_mutually_exclusive_group(required=True)
+    rack_ref.add_argument("--track", type=track_value, help="Track containing the Drum Rack.")
+    rack_ref.add_argument("--device-path", help="LOM path to the Drum Rack device.")
+    drum_pad_load.add_argument("--device", type=track_value, default="Drum Rack", help="Drum Rack name/index on --track. Defaults to 'Drum Rack'.")
+    drum_pad_load.add_argument("--pad", required=True, type=midi_note_value, help="Pad note as 0..127 or note name, e.g. C1.")
+    drum_pad_load.add_argument("--item", required=True, help="Live browser path to a sample, instrument, or preset.")
+    drum_pad_load.add_argument("--clear", action="store_true", help="Clear existing chains on the pad before loading.")
 
     params = sub.add_parser("params", help="List parameters for a device.")
     add_device_ref_args(params)

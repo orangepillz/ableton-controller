@@ -15,7 +15,7 @@ from .parser_tracks import add_track_scene_commands
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Control Ableton Live through Codex_AI.")
+    parser = argparse.ArgumentParser(prog="abletonctl", description="Control Ableton Live through Codex_AI.")
     add_common(parser)
     sub = parser.add_subparsers(dest="command", required=True)
 

@@ -5,42 +5,53 @@ Prefer these wrapped commands before using raw LOM or UI automation.
 ## Core And State
 
 ```sh
-python3 abletonctl.py ping
-python3 abletonctl.py status
-python3 abletonctl.py tracks
-python3 abletonctl.py selected --devices
-python3 abletonctl.py select-track --track "Bass"
-python3 abletonctl.py tempo
-python3 abletonctl.py tempo --set 140
-python3 abletonctl.py play
-python3 abletonctl.py stop
-python3 abletonctl.py continue
-python3 abletonctl.py undo
-python3 abletonctl.py redo
+abletonctl ping
+abletonctl status
+abletonctl tracks
+abletonctl selected --devices
+abletonctl select-track --track "Bass"
+abletonctl copilot-intent "make the drop bass move more"
+abletonctl tempo
+abletonctl tempo --set 140
+abletonctl play
+abletonctl stop
+abletonctl continue
+abletonctl undo
+abletonctl redo
 ```
+
+`copilot-intent` is local and read-only. It matches a request against
+`.ableton-copilot/memory.json` and returns personalized planning hints before you
+choose probes, macros, or edit commands. Its `profile_hints` summarize learned
+arrangement phase signatures, roles, shape, routing, and automation evidence
+from historical projects.
 
 ## Tracks, Scenes, And Routing
 
 ```sh
-python3 abletonctl.py create-track --type midi --name "Drop Bass"
-python3 abletonctl.py create-track --type audio --name "Resample Print"
-python3 abletonctl.py create-track --type return --name "Short Verb"
-python3 abletonctl.py duplicate-track --track "Lead"
-python3 abletonctl.py delete-track --track "Scratch"
-python3 abletonctl.py create-scene --name "Drop"
-python3 abletonctl.py fire-scene --scene "Drop"
-python3 abletonctl.py set-routing --track "Resample Print" --direction input --type "Resampling"
-python3 abletonctl.py set-routing --track "Bass" --direction output --type "Bass Bus"
+abletonctl create-track --type midi --name "Drop Bass"
+abletonctl create-track --type audio --name "Resample Print"
+abletonctl create-track --type return --name "Short Verb"
+abletonctl duplicate-track --track "Lead"
+abletonctl delete-track --track "Scratch"
+abletonctl create-scene --name "Drop"
+abletonctl fire-scene --scene "Drop"
+abletonctl locators
+abletonctl set-locator --time 64 --name "02 Main Drop"
+abletonctl set-routing --track "Resample Print" --direction input --type "Resampling"
+abletonctl set-routing --track "Bass" --direction output --type "Bass Bus"
 ```
 
 Use `set-routing` after reading available route names from a failed attempt or Live state. Routing names are matched by displayed name.
+Use `locators` before `set-locator`; renaming locators changes the Live set, so
+prefer a rendered plan for multi-locator edits.
 
 For grouping, first try a LOM-backed plan:
 
 ```sh
-python3 abletonctl.py lom-inspect song
-python3 abletonctl.py lom-call song.create_group_track --args '[0]'
-python3 abletonctl.py lom-set song.tracks[0].name "Drum Bus"
+abletonctl lom-inspect song
+abletonctl lom-call song.create_group_track --args '[0]'
+abletonctl lom-set song.tracks[0].name "Drum Bus"
 ```
 
 Only use UI grouping with `menu-search "Group Tracks"` or `hotkey cmd+g` when selection is known.
@@ -48,9 +59,9 @@ Only use UI grouping with `menu-search "Group Tracks"` or `hotkey cmd+g` when se
 ## Mixer And Sends
 
 ```sh
-python3 abletonctl.py set-track --track "Kick" --volume 0.82 --pan 0
-python3 abletonctl.py set-track --track "Bass" --mute false --solo false --arm false
-python3 abletonctl.py set-send --track "Snare" --send "A" --value 0.18
+abletonctl set-track --track "Kick" --volume 0.82 --pan 0
+abletonctl set-track --track "Bass" --mute false --solo false --arm false
+abletonctl set-send --track "Snare" --send "A" --value 0.18
 ```
 
 Use conservative values. In Ableton API mixer values are often normalized, so prefer small deltas or probe returned parameter ranges when exact gain in dB matters.
@@ -58,29 +69,34 @@ Use conservative values. In Ableton API mixer values are often normalized, so pr
 ## Devices And Stock Controls
 
 ```sh
-python3 abletonctl.py devices --track "Bass"
-python3 abletonctl.py device-tree --track "Bass" --depth 5
-python3 abletonctl.py device-add-stock --target-track "Bass" --path "audio_effects/EQ Eight" --target-index 0
-python3 abletonctl.py device-add-stock --target-track "Bass" --name "Auto Filter" --root audio_effects
-python3 abletonctl.py device-move --source-track "Bass" --source-device "Auto Filter" --target-track "Bass" --target-index 0
-python3 abletonctl.py device-delete --track "Bass" --device "Auto Filter"
-python3 abletonctl.py params --track "Bass" --device "EQ Eight"
+abletonctl devices --track "Bass"
+abletonctl device-tree --track "Bass" --depth 5
+abletonctl device-add-stock --target-track "Bass" --path "audio_effects/EQ Eight" --target-index 0
+abletonctl device-add-stock --target-track "Bass" --name "Auto Filter" --root audio_effects
+abletonctl device-move --source-track "Bass" --source-device "Auto Filter" --target-track "Bass" --target-index 0
+abletonctl device-delete --track "Bass" --device "Auto Filter"
+abletonctl drum-pad-load --track "Drums" --device "Drum Rack" --pad C1 --item "samples/Kick.wav"
+abletonctl params --track "Bass" --device "EQ Eight"
 ```
 
 Nested racks require `device-tree` paths:
 
 ```sh
-python3 abletonctl.py device-add-stock --target-path "song.tracks[3].devices[0].chains[0]" --path "audio_effects/Compressor"
-python3 abletonctl.py set-param --device-path "song.tracks[3].devices[0].chains[0].devices[0]" --param Threshold --normalized 0.35
+abletonctl device-add-stock --target-path "song.tracks[3].devices[0].chains[0]" --path "audio_effects/Compressor"
+abletonctl set-param --device-path "song.tracks[3].devices[0].chains[0].devices[0]" --param Threshold --normalized 0.35
 ```
+
+For Drum Rack kit building, use `drum-pad-load` after `browser-search` identifies
+a loadable sample, instrument, or preset path. It targets the requested pad note
+and refuses to overwrite existing pad chains unless `--clear` is present.
 
 Stock registry commands:
 
 ```sh
-python3 abletonctl.py stock-devices --summary
-python3 abletonctl.py stock-devices --root audio_effects --query filter
-python3 abletonctl.py stock-controls --device "Auto Filter" --control frequency
-python3 abletonctl.py set-stock-control --track "Bass" --device "Auto Filter" --stock-device "Auto Filter" --control frequency --normalized 0.42
+abletonctl stock-devices --summary
+abletonctl stock-devices --root audio_effects --query filter
+abletonctl stock-controls --device "Auto Filter" --control frequency
+abletonctl set-stock-control --track "Bass" --device "Auto Filter" --stock-device "Auto Filter" --control frequency --normalized 0.42
 ```
 
 Common useful devices:
@@ -105,20 +121,20 @@ Clip reference styles:
 Create and edit:
 
 ```sh
-python3 abletonctl.py clip-create-midi --track "Bass" --slot 0 --length 4 --name "Call Bass"
-python3 abletonctl.py clip-create-midi --track "Bass" --start 64 --length 8 --name "Drop Bass"
-python3 abletonctl.py clip-create-audio --track "Riser" --file "/absolute/path/riser.wav" --start 56 --warping true --warp-mode complex-pro
-python3 abletonctl.py clip-set --track "Bass" --slot 0 --looping true --loop-start 0 --loop-end 4 --end-marker 4
-python3 abletonctl.py clip-copy --source-track "Bass" --source-slot 0 --dest-track "Bass" --dest-start 64
-python3 abletonctl.py clip-split --track "Bass" --arrangement-start 64 --time 68
+abletonctl clip-create-midi --track "Bass" --slot 0 --length 4 --name "Call Bass"
+abletonctl clip-create-midi --track "Bass" --start 64 --length 8 --name "Drop Bass"
+abletonctl clip-create-audio --track "Riser" --file "/absolute/path/riser.wav" --start 56 --warping true --warp-mode complex-pro
+abletonctl clip-set --track "Bass" --slot 0 --looping true --loop-start 0 --loop-end 4 --end-marker 4
+abletonctl clip-copy --source-track "Bass" --source-slot 0 --dest-track "Bass" --dest-start 64
+abletonctl clip-split --track "Bass" --arrangement-start 64 --time 68
 ```
 
 Audio warp:
 
 ```sh
-python3 abletonctl.py clip-warp --track "Vocal Chop" --arrangement-start 32 --warping true --warp-mode complex-pro --pitch-coarse -12
-python3 abletonctl.py clip-warp-marker-add --track "Break" --arrangement-start 16 --beat-time 4 --sample-time 3.85
-python3 abletonctl.py clip-warp-marker-move --track "Break" --arrangement-start 16 --beat-time 4 --to-beat 4.25
+abletonctl clip-warp --track "Vocal Chop" --arrangement-start 32 --warping true --warp-mode complex-pro --pitch-coarse -12
+abletonctl clip-warp-marker-add --track "Break" --arrangement-start 16 --beat-time 4 --sample-time 3.85
+abletonctl clip-warp-marker-move --track "Break" --arrangement-start 16 --beat-time 4 --to-beat 4.25
 ```
 
 Warp modes: `beats`, `tones`, `texture`, `repitch`, `complex`, `rex`, `complex-pro`.
@@ -128,39 +144,53 @@ Warp modes: `beats`, `tones`, `texture`, `repitch`, `complex`, `rex`, `complex-p
 Note objects support pitch, start_time, duration, velocity, mute, probability, velocity_deviation, and release_velocity.
 
 ```sh
-python3 abletonctl.py midi-add-notes --track "Bass" --slot 0 --notes '[{"pitch":36,"start_time":0,"duration":0.5,"velocity":112}]'
-python3 abletonctl.py midi-get-notes --track "Bass" --slot 0 --start 0 --end 4
-python3 abletonctl.py midi-replace-notes --track "Bass" --slot 0 --notes '[{"pitch":36,"start_time":0,"duration":1,"velocity":112}]'
-python3 abletonctl.py midi-transform-notes --track "Hats" --slot 0 --start 0 --end 4 --pitch-min 42 --pitch-max 46 --velocity-deviation 10 --probability 0.92
-python3 abletonctl.py midi-duplicate-region --track "Bass" --slot 0 --start 0 --length 2 --destination-time 2 --transpose 7
+abletonctl midi-add-notes --track "Bass" --slot 0 --notes '[{"pitch":36,"start_time":0,"duration":0.5,"velocity":112}]'
+abletonctl midi-get-notes --track "Bass" --slot 0 --start 0 --end 4
+abletonctl midi-replace-notes --track "Bass" --slot 0 --notes '[{"pitch":36,"start_time":0,"duration":1,"velocity":112}]'
+abletonctl midi-transform-notes --track "Hats" --slot 0 --start 0 --end 4 --pitch-min 42 --pitch-max 46 --velocity-deviation 10 --probability 0.92
+abletonctl midi-duplicate-region --track "Bass" --slot 0 --start 0 --length 2 --destination-time 2 --transpose 7
 ```
 
 Use `midi-replace-notes` only after approval unless the clip was just created for the workflow.
 
 ## Automation
 
-Automation steps use clip time. Use `value` for raw parameter values and `normalized` for 0..1 movement.
+Automation steps and breakpoint events use clip time. Use `value` for raw parameter values
+and `normalized` for 0..1 movement. Runtime `--curve`/event payloads create breakpoint
+events. For guaranteed Ableton curve handles, use the saved-set commands; they write and
+read the actual `.als` `CurveControl*` fields.
 
 ```sh
-python3 abletonctl.py clip-stock-automation-set --track "Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.18},{"time":1,"duration":1,"normalized":0.72}]'
-python3 abletonctl.py clip-automation-get --track "Bass" --slot 0 --device "Auto Filter" --param Frequency --times 0,0.5,1,1.5
-python3 abletonctl.py clip-stock-automation-clear --track "Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency
+abletonctl clip-stock-automation-set --track "Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.18},{"time":1,"duration":1,"normalized":0.72}]'
+abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --steps 8 --clear
+abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --events '[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":16,"normalized":0.95}]' --clear
+abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","duration":16,"from_normalized":0.2,"to_normalized":0.95,"curve":"ease-in-out","clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
+abletonctl arrangement-automation-file-set --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --clip-name "Noise Rise" --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out
+abletonctl arrangement-automation-file-get --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency
+abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --times 0,4,8,12,15.5
+abletonctl clip-automation-get --track "Bass" --slot 0 --device "Auto Filter" --param Frequency --times 0,0.5,1,1.5
+abletonctl clip-stock-automation-clear --track "Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency
 ```
 
 Clip automation is preferred for repeatable bass movement, filter sweeps, fakeouts, fills, and transitions.
+Use `arrangement-automation-set` when the request describes a buildup, drop, fakeout, or transition over an Arrangement range and a clip already exists at `--arrangement-start`.
+Use `arrangement-automation-set-many` for coupled lanes on the same MIDI Arrangement clip, especially cutoff plus resonance, because missing or hidden Arrangement lanes can be materialized together without discarding the first lane.
+Use `arrangement-automation-file-set` for true parametric curve writes; close Live first or avoid saving the open in-memory set over the patched file.
+Use `arrangement-automation-get` after every Arrangement automation write. Times are clip-relative: if a clip starts at Arrangement beat 48, `--times 0,8,15.5` samples beats 48, 56, and 63.5.
+Run multiple sampled Arrangement automation reads sequentially, not in parallel, because hidden Arrangement lanes are read by briefly moving and restoring Live's playhead.
 
 ## Browser And Local UI
 
 ```sh
-python3 abletonctl.py browser-roots
-python3 abletonctl.py browser-search "Operator" --item instruments --depth 4
-python3 abletonctl.py browser-load "instruments/Operator"
-python3 abletonctl.py show-view Browser
-python3 abletonctl.py focus-view Session
-python3 abletonctl.py hotkey cmd+s
-python3 abletonctl.py hotkey cmd+g
-python3 abletonctl.py hotkey cmd+shift+r
-python3 abletonctl.py menu-search "Export Audio/Video"
+abletonctl browser-roots
+abletonctl browser-search "Operator" --item instruments --depth 4
+abletonctl browser-load "instruments/Operator"
+abletonctl show-view Browser
+abletonctl focus-view Session
+abletonctl hotkey cmd+s
+abletonctl hotkey cmd+g
+abletonctl hotkey cmd+shift+r
+abletonctl menu-search "Export Audio/Video"
 ```
 
 Local UI commands need macOS Accessibility permissions and correct focus. Prefer bridge commands when possible.
@@ -170,10 +200,10 @@ Local UI commands need macOS Accessibility permissions and correct focus. Prefer
 Use LOM when the CLI has no wrapper:
 
 ```sh
-python3 abletonctl.py lom-inspect song.tracks[0]
-python3 abletonctl.py lom-get song.tracks[0].name
-python3 abletonctl.py lom-set song.tracks[0].color_index 5
-python3 abletonctl.py lom-call song.create_scene --args '[1]'
+abletonctl lom-inspect song.tracks[0]
+abletonctl lom-get song.tracks[0].name
+abletonctl lom-set song.tracks[0].color_index 5
+abletonctl lom-call song.create_scene --args '[1]'
 ```
 
 Probe with `lom-inspect` before setting unknown properties. If a LOM operation is uncertain or destructive, dry-run and ask.

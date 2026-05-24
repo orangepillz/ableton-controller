@@ -15,6 +15,7 @@ try:
     from .clip_warp_commands import ClipWarpCommandMixin
     from .device_commands import DeviceCommandMixin
     from .dispatch import CommandDispatcherMixin
+    from .drum_pad_commands import DrumPadCommandMixin
     from .lom_commands import LomCommandMixin
     from .lom_resolver import LomResolverMixin
     from .midi_commands import MidiCommandMixin
@@ -33,6 +34,7 @@ except ImportError:
     from clip_warp_commands import ClipWarpCommandMixin
     from device_commands import DeviceCommandMixin
     from dispatch import CommandDispatcherMixin
+    from drum_pad_commands import DrumPadCommandMixin
     from lom_commands import LomCommandMixin
     from lom_resolver import LomResolverMixin
     from midi_commands import MidiCommandMixin
@@ -59,6 +61,7 @@ class CodexBridge(
     CommandDispatcherMixin,
     LomCommandMixin,
     DeviceCommandMixin,
+    DrumPadCommandMixin,
     ClipCommandMixin,
     ClipWarpCommandMixin,
     AutomationCommandMixin,

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import plistlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,12 +16,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from abletonctl import DEFAULT_HOST, DEFAULT_PORT, send  # noqa: E402
 from stock_device_controls import DEFAULT_REGISTRY_PATH, slugify  # noqa: E402
+from stock_device_generator_lib import build_controls, detect_live_version, track_kind  # noqa: E402
 
 
 ROOTS = ("instruments", "audio_effects", "midi_effects", "max_for_live")
 TEMP_AUDIO_TRACK = "__Codex Stock Controls Audio__"
 TEMP_MIDI_TRACK = "__Codex Stock Controls MIDI__"
-LIVE_APP_INFO = Path("/Applications/Ableton Live 12 Suite.app/Contents/Info.plist")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -241,83 +240,6 @@ def inspect_stock_device(
         "parameter_count": len(controls),
         "controls": controls,
     }
-
-
-def build_controls(parameters: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    used_slugs: dict[str, int] = {}
-    controls: list[dict[str, Any]] = []
-    for parameter in parameters:
-        name = str(parameter.get("name") or "Parameter %s" % parameter.get("index"))
-        base_slug = slugify(name)
-        occurrence = used_slugs.get(base_slug, 0)
-        used_slugs[base_slug] = occurrence + 1
-        slug = base_slug if occurrence == 0 else "%s_%s" % (base_slug, parameter.get("index"))
-        aliases = unique_strings(
-            [
-                name,
-                slug,
-                str(parameter.get("index")),
-                "%s %s" % (parameter.get("index"), name),
-                parameter.get("original_name"),
-            ]
-        )
-        controls.append(
-            {
-                "index": parameter.get("index"),
-                "name": name,
-                "slug": slug,
-                "aliases": aliases,
-                "parameter": {
-                    "name": name,
-                    "original_name": parameter.get("original_name"),
-                    "min": parameter.get("min"),
-                    "max": parameter.get("max"),
-                    "default_value": parameter.get("default_value"),
-                    "value": parameter.get("value"),
-                    "display_value": parameter.get("display_value"),
-                    "is_enabled": parameter.get("is_enabled"),
-                    "is_quantized": parameter.get("is_quantized"),
-                    "value_items": parameter.get("value_items"),
-                },
-            }
-        )
-    return controls
-
-
-def unique_strings(values: list[Any]) -> list[str]:
-    found: list[str] = []
-    seen = set()
-    for value in values:
-        if value is None:
-            continue
-        text = str(value)
-        if text not in seen:
-            found.append(text)
-            seen.add(text)
-    return found
-
-
-def track_kind(device_or_root: dict[str, Any] | str) -> str:
-    if isinstance(device_or_root, dict):
-        root = str(device_or_root.get("root", ""))
-        path = str(device_or_root.get("path", ""))
-    else:
-        root = str(device_or_root)
-        path = ""
-    if root == "audio_effects":
-        return "audio"
-    if root == "max_for_live" and "/Max Audio Effect/" in path:
-        return "audio"
-    return "midi"
-
-
-def detect_live_version() -> str | None:
-    try:
-        with LIVE_APP_INFO.open("rb") as handle:
-            info = plistlib.load(handle)
-        return str(info.get("CFBundleShortVersionString") or info.get("CFBundleVersion") or "")
-    except Exception:
-        return None
 
 
 if __name__ == "__main__":

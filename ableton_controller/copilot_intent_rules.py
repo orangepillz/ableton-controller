@@ -1,0 +1,106 @@
+"""Shared intent rule data for copilot matching and personalization."""
+
+from __future__ import annotations
+
+
+INTENT_RULES = (
+    {
+        "id": "kick-sub-sidechain",
+        "title": "Kick/Sub Sidechain And Low-End Separation",
+        "terms": ("sidechain", "sc", "sc trigger", "kick", "sub", "bd"),
+        "commands": ("workflow-macro render kick-sub-separation", "session-snapshot", "device-tree", "set-stock-control"),
+        "planning_bias": "Prefer a kick/sub separation plan before broad low-end advice.",
+        "likely_followups": ("tighten MIDI gaps around kicks", "verify compressor/EQ placement", "read back bass notes"),
+    },
+    {
+        "id": "drum-kit-building",
+        "title": "Drum Rack Kit Building And Pattern Programming",
+        "terms": ("drums", "drum", "drumrack", "tr8s", "bd", "sd", "kick", "snare", "hats"),
+        "commands": ("workflow-macro render drum-punch-bus", "drum-pad-load", "device-tree", "clip-create-midi", "midi-add-notes"),
+        "planning_bias": "When sample paths or pad roles are clear, build exact Drum Rack pads instead of asking how to place samples.",
+        "likely_followups": ("humanize hats", "verify pad chains", "add drum bus processing"),
+    },
+    {
+        "id": "hat-humanize",
+        "title": "Hat Groove Humanization",
+        "terms": ("hat", "hats", "human", "humanize", "natural", "robotic", "mechanical", "swing", "tighten hats", "against kick and snare", "groove", "velocity", "probability", "ch", "hh"),
+        "commands": ("workflow-macro render hat-humanize", "midi-get-notes", "midi-transform-notes"),
+        "planning_bias": "For hat humanization, preserve grid anchors while adding controlled velocity and probability variation.",
+        "likely_followups": ("verify hat accents", "tighten hats against kick and snare", "add light swing only after note readback"),
+    },
+    {
+        "id": "drop-impact",
+        "title": "Drop Impact And Controlled Slam",
+        "terms": ("drop impact", "drop hit", "drop slam", "hit harder", "hits harder", "harder drop", "drop punch", "punchier drop", "slam", "slams", "slam harder", "impact", "heavier drop"),
+        "commands": (
+            "workflow-macro render kick-sub-separation",
+            "workflow-macro render drum-punch-bus",
+            "workflow-macro render bass-movement",
+            "workflow-macro render mix-bus-control",
+            "device-tree",
+            "stock-controls",
+        ),
+        "planning_bias": "For drop impact, inspect kick/sub fit, drum punch, bass motion, and mix headroom before chasing loudness.",
+        "likely_followups": ("tighten kick/sub gaps", "add pre-drop contrast", "verify headroom after impact moves"),
+    },
+    {
+        "id": "glitch-drum-transition",
+        "title": "Glitchy Zap/Perc Drum Transition",
+        "terms": ("glitch", "glitchy", "stutter", "cut out", "zap", "perc", "transition", "drum rack", "synth", "loop"),
+        "commands": ("workflow-macro render glitch-drum-transition", "browser-search", "drum-pad-load", "midi-add-notes", "device-add-stock"),
+        "planning_bias": "For zap/perc transition requests, render the glitch drum transition macro and adapt the sample paths from browser-search results.",
+        "likely_followups": ("replace placeholder sample paths", "verify rack chains", "tune Echo and filter movement into the synth"),
+    },
+    {
+        "id": "riser-transition",
+        "title": "Riser/Swell Transition Into Drop",
+        "terms": ("riser", "rise", "swell", "inhale", "build", "buildup", "uplifter", "before the drop", "drop"),
+        "commands": ("workflow-macro render riser-transition",),
+        "planning_bias": "For riser or swell requests, render a non-destructive riser macro before choosing detailed synth or FX tuning.",
+        "likely_followups": ("tune filter dip before the drop", "add noise texture", "shorten the reverb tail"),
+    },
+    {
+        "id": "arrangement-flow",
+        "title": "Arrangement Flow And Section Scaffolding",
+        "terms": ("arrangement", "section", "phase", "scene", "locator", "marker", "timeline", "transition", "fakeout", "drop"),
+        "commands": (
+            "workflow-macro render arrangement-marker-naming",
+            "workflow-macro render arrangement-phase-scaffold",
+            "copilot-intent",
+            "session-snapshot",
+            "arrangement-automation-set",
+        ),
+        "planning_bias": "For broad arrangement requests, create or use explicit section labels before making dense clip or automation edits.",
+        "likely_followups": ("name numbered locators", "add build automation", "place transition FX", "verify section role density"),
+    },
+    {
+        "id": "bass-movement",
+        "title": "Bass Movement And Resampling Prep",
+        "terms": ("bass", "operator", "saturator", "autofilter", "roar", "movement", "drop"),
+        "commands": (
+            "workflow-macro render bass-movement",
+            "workflow-macro render bass-resampling-pass",
+            "workflow-macro render call-response-bass",
+            "clip-stock-automation-set",
+            "arrangement-automation-set",
+        ),
+        "planning_bias": "Translate vague movement requests into filter/distortion automation plus a verification probe.",
+        "likely_followups": ("render a resampling pass", "separate sub from mid bass", "add call/response variation"),
+    },
+    {
+        "id": "space-delay-rides",
+        "title": "Reverb/Delay Spatial Movement",
+        "terms": ("reverb", "delay", "echo", "space", "spatial", "send", "throw", "throws", "tail", "tails"),
+        "commands": ("workflow-macro render personalized-space-chain", "set-send", "device-add-stock", "arrangement-automation-set", "clip-stock-automation-set"),
+        "planning_bias": "Prefer send or return movement for spatial build/release requests before adding inserts everywhere.",
+        "likely_followups": ("cut tails before drops", "automate send throws", "verify return levels"),
+    },
+    {
+        "id": "mix-bus-control",
+        "title": "Mix Bus Control And Loudness Prep",
+        "terms": ("mix", "master", "compressor", "gluecompressor", "limiter", "utility", "eq8"),
+        "commands": ("workflow-macro render mix-bus-control", "stock-controls", "set-stock-control", "set-track", "params"),
+        "planning_bias": "Use conservative, inspectable gain/dynamics moves and avoid destructive loudness changes without approval.",
+        "likely_followups": ("check Utility gain", "read limiter settings", "verify bus routing"),
+    },
+)

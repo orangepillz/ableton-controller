@@ -64,7 +64,10 @@ class ResolverMixin(object):
             container = self._device_container(device)
             return {"device": device, "container": container, "index": self._device_index(device, container)}
 
-        track = self._resolve_track(self._prefixed(payload, prefix, "track"))
+        track_identifier = self._prefixed(payload, prefix, "device_track", None)
+        if track_identifier is None:
+            track_identifier = self._prefixed(payload, prefix, "track")
+        track = self._resolve_track(track_identifier)
         device = self._resolve_device(track, self._prefixed(payload, prefix, "device"))
         return {"device": device, "container": track, "index": self._device_index(device, track)}
 

@@ -2,7 +2,18 @@
 
 import argparse
 import json
+import re
 from typing import Any
+
+NOTE_CLASSES = {
+    "c": 0,
+    "d": 2,
+    "e": 4,
+    "f": 5,
+    "g": 7,
+    "a": 9,
+    "b": 11,
+}
 
 def bool_arg(value: str) -> bool:
     normalized = value.strip().lower()
@@ -18,6 +29,26 @@ def track_value(value: str) -> int | str:
         return int(value)
     except ValueError:
         return value
+
+
+def midi_note_value(value: str) -> int:
+    text = value.strip()
+    try:
+        note = int(text)
+    except ValueError:
+        match = re.fullmatch(r"([A-Ga-g])([#b]?)(-?\d+)", text)
+        if not match:
+            raise argparse.ArgumentTypeError("expected MIDI note 0..127 or note name like C1")
+        name, accidental, octave_text = match.groups()
+        note_class = NOTE_CLASSES[name.lower()]
+        if accidental == "#":
+            note_class += 1
+        elif accidental == "b":
+            note_class -= 1
+        note = (int(octave_text) + 2) * 12 + note_class
+    if note < 0 or note > 127:
+        raise argparse.ArgumentTypeError("MIDI note must be 0..127")
+    return note
 
 
 def json_arg(value: str) -> Any:

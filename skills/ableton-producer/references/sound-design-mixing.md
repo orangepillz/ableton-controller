@@ -43,9 +43,9 @@ To make a drop hit harder:
 Useful commands:
 
 ```sh
-python3 abletonctl.py clip-set --track "Build FX" --arrangement-start 60 --gain -3
-python3 abletonctl.py set-track --track "Kick" --volume 0.86
-python3 abletonctl.py device-add-stock --target-track "Drum Bus" --path "audio_effects/Drum Buss"
+abletonctl clip-set --track "Build FX" --arrangement-start 60 --gain -3
+abletonctl set-track --track "Kick" --volume 0.86
+abletonctl device-add-stock --target-track "Drum Bus" --path "audio_effects/Drum Buss"
 ```
 
 ## Kick/Sub Relationship

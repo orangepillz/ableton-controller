@@ -1,5 +1,6 @@
 """Payload builders for clip commands."""
 
+from .arrangement_automation import arrangement_automation_events, arrangement_automation_lanes, arrangement_automation_steps
 from .payload_helpers import add_if_not_none, clip_automation_device_ref_payload, clip_range_payload, clip_ref_payload
 
 def build_clip_payload(args):
@@ -90,15 +91,64 @@ def build_clip_payload(args):
         add_if_not_none(payload, "times", args.times)
         return payload
     if command == "clip-automation-set":
-        if not isinstance(args.steps, list):
+        if args.steps is not None and args.events is not None:
+            raise SystemExit("Use only one of clip-automation-set --steps or --events.")
+        if args.steps is None and args.events is None:
+            raise SystemExit("clip-automation-set needs --steps or --events.")
+        if args.steps is not None and not isinstance(args.steps, list):
             raise SystemExit("clip-automation-set --steps must be a JSON list.")
-        return {
+        if args.events is not None and not isinstance(args.events, list):
+            raise SystemExit("clip-automation-set --events must be a JSON list.")
+        payload = {
             "command": "clip_automation_set",
             **clip_ref_payload(args),
             **clip_automation_device_ref_payload(args),
             "param": args.param,
-            "steps": args.steps,
             "clear": args.clear,
+        }
+        add_if_not_none(payload, "steps", args.steps)
+        add_if_not_none(payload, "events", args.events)
+        return payload
+    if command == "arrangement-automation-get":
+        payload = {
+            "command": "arrangement_automation_get",
+            "track": args.track,
+            "arrangement_start": args.arrangement_start,
+            **clip_automation_device_ref_payload(args),
+            "param": args.param,
+        }
+        add_if_not_none(payload, "times", args.times)
+        return payload
+    if command == "arrangement-automation-set":
+        if args.events is not None and (args.curve is not None or args.curve_coefficients is not None):
+            raise SystemExit("Use --events or generated --curve/--curve-coefficients, not both.")
+        if args.events is not None or args.curve is not None or args.curve_coefficients is not None:
+            payload = {
+                "command": "arrangement_automation_set",
+                "track": args.track,
+                "arrangement_start": args.arrangement_start,
+                **clip_automation_device_ref_payload(args),
+                "param": args.param,
+                "events": arrangement_automation_events(args),
+                "clear": args.clear,
+            }
+            return payload
+        return {
+            "command": "arrangement_automation_set",
+            "track": args.track,
+            "arrangement_start": args.arrangement_start,
+            **clip_automation_device_ref_payload(args),
+            "param": args.param,
+            "steps": arrangement_automation_steps(args),
+            "clear": args.clear,
+        }
+    if command == "arrangement-automation-set-many":
+        return {
+            "command": "arrangement_automation_set_many",
+            "track": args.track,
+            "arrangement_start": args.arrangement_start,
+            **clip_automation_device_ref_payload(args),
+            "lanes": arrangement_automation_lanes(args.lanes),
         }
     if command == "clip-automation-clear":
         payload = {"command": "clip_automation_clear", **clip_ref_payload(args)}

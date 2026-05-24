@@ -1,22 +1,33 @@
 ---
 name: ableton-producer
-description: Natural language Ableton Live production control through the ableton-controller CLI. Use when Codex should translate producer intent into deterministic `python3 abletonctl.py ...` command sequences for Ableton session work, including track setup, routing, MIDI generation/editing, clip and arrangement edits, stock device chains, automation, drum/sampler workflows, resampling plans, bass music sound design, mixing, mastering prep, cleanup, dry-run previews, and iterative creative revisions.
+description: Natural language Ableton Live production control through the ableton-controller CLI. Use when Codex should translate producer intent into deterministic `abletonctl ...` command sequences for Ableton session work, including track setup, routing, MIDI generation/editing, clip and arrangement edits, stock device chains, automation, drum/sampler workflows, resampling plans, bass music sound design, mixing, mastering prep, cleanup, dry-run previews, and iterative creative revisions.
 ---
 
 # Ableton Producer
 
 Translate creative production requests into safe, musical, deterministic Ableton CLI operations. Act like an experienced electronic producer who can plan, execute, inspect results, revise, and explain production choices when it helps the user make better decisions.
 
+## CLI Invocation
+
+- Invoke the installed command directly as `abletonctl ...`.
+- Do not search for `abletonctl.py`, guess project paths, or run `/usr/bin/python3`; macOS/Xcode Python 3.9 is too old for the controller's type syntax.
+- If `abletonctl` is missing, run `python3 scripts/install_bridge.py install-cli` once from `/Users/danieldresner/Documents/ableton-controller`, then retry the direct command.
+- `install-cli` links `~/.local/bin/abletonctl` to the repo launcher, which resolves the checkout and chooses Python 3.10+.
+
 ## Operating Loop
 
 1. Establish context before changing the set:
-   - Run `python3 abletonctl.py ping`, `status`, `tracks`, and usually `selected --devices`.
+   - Run `abletonctl session-snapshot` for the standard read-only context probes. Use separate `ping`, `status`, `tracks`, and `selected --devices` calls if you need narrower debugging output.
    - For target tracks, run `devices`, `device-tree`, `clips`, or `clip-slots` before editing.
    - For stock devices, use `stock-devices`, `stock-controls`, and `params` before setting parameters.
+   - For Arrangement automation, use `arrangement-automation-set` and immediately verify with `arrangement-automation-get`; sample times are clip-relative to `--arrangement-start`. Use `arrangement-automation-file-set`/`arrangement-automation-file-get` on a saved `.als` when the request needs real Ableton breakpoint curve handles (`CurveControl*`) rather than a stepped or linear runtime lane; patch while the set is closed, then reopen and verify sampled values. Use `arrangement-automation-set-many` when creating or replacing several lanes on the same MIDI Arrangement clip, such as Auto Filter Frequency plus Resonance, so materialization can preserve the related lanes. Run sampled Arrangement automation reads sequentially because hidden Arrangement lanes are read by briefly moving and restoring the playhead.
+   - When available, skim `.ableton-copilot/personal-workflow-profile.md`, `.ableton-copilot/memory.json`, or `.ableton-copilot/latest-report.md` for personalized workflow signals before asking broad style or workflow questions.
+   - For broad or style-heavy requests, run `abletonctl copilot-intent "<user request>"` to surface personalized mappings and likely follow-ups before asking clarifying questions.
 2. Translate the user's intent into:
    - Musical goal: impact, tension, width, groove, contrast, clarity, movement, arrangement, or polish.
    - Target material: track, group, clip, scene, device, time range, key/scale, tempo, and genre.
    - CLI plan: exact commands, execution order, state probes, validation probes, and rollback/recovery.
+   - For common repeatable workflows, consider `abletonctl workflow-macro render ...` and adapt the rendered plan rather than rebuilding the command sequence from scratch.
 3. Choose the smallest useful operation set:
    - Prefer wrapped CLI commands over raw LOM calls.
    - Use `lom-get`, `lom-set`, `lom-call`, and `lom-inspect` only when no high-level command exists.
@@ -70,7 +81,10 @@ Load only the references needed for the current request:
 - `references/workflow-primitives.md`: reusable command patterns for tracks, MIDI, devices, automation, routing, resampling, cleanup.
 - `references/sound-design-mixing.md`: bass music sound design recipes, mix/master heuristics, arrangement moves.
 - `references/genre-guides.md`: dubstep, tech house, experimental bass, glitch hop, future bass, DnB, breakbeat conventions.
+- `references/research-synthesis.md`: non-imitative synthesis from producer research including Tipper, G Jones, Chris Lake, bass movement, groove, and arrangement flow.
 - `references/examples.md`: prompt-to-plan examples for complex natural language production requests.
+
+Personalized memory and the workflow profile are generated by `python3 scripts/copilot_improvement.py run` and are intentionally ignored by git. Treat those signals as confidence-scored hints, not hard rules; prefer current set evidence when the two disagree.
 
 ## Output Pattern
 
@@ -84,7 +98,7 @@ Plan:
 2. Edit ...
 3. Verify ...
 Commands:
-python3 abletonctl.py ...
+abletonctl ...
 ```
 
 For executed changes, present:

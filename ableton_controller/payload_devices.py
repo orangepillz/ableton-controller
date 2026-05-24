@@ -26,6 +26,17 @@ def build_device_payload(args):
         }
     if command == "device-delete":
         return {"command": "device_delete", **device_ref_payload(args)}
+    if command == "drum-pad-load":
+        payload = {
+            "command": "drum_pad_load",
+            "device": args.device,
+            "pad": args.pad,
+            "item": args.item,
+            "clear": args.clear,
+        }
+        add_if_not_none(payload, "track", args.track)
+        add_if_not_none(payload, "device_path", args.device_path)
+        return payload
     if command == "params":
         return {"command": "params", **device_ref_payload(args)}
     return None

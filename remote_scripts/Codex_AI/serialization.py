@@ -136,6 +136,8 @@ class SerializationMixin(object):
             return {"type": type(value).__name__, "item": self._browser_item_info(value)}
         if hasattr(value, "sample_time") and hasattr(value, "beat_time"):
             return self._warp_marker_info(value)
+        if hasattr(value, "time") and hasattr(value, "value") and hasattr(value, "control_coefficients"):
+            return self._automation_event_info(value)
         if hasattr(value, "insert_step") and hasattr(value, "value_at_time"):
             return self._automation_envelope_info(value)
         if hasattr(value, "pitch") and hasattr(value, "start_time"):

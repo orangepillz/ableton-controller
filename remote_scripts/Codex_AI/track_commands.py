@@ -25,6 +25,67 @@ class TrackCommandMixin(object):
             scene.name = str(payload.get("name"))
         return self._scene_info(scene, self._scene_index(scene))
 
+    def _locators(self):
+        return {"locators": [self._locator_info(locator, index) for index, locator in enumerate(self._cue_points())]}
+
+    def _set_locator(self, payload):
+        name = payload.get("name")
+        if not name:
+            raise ValueError("set_locator requires a name")
+        locator = self._resolve_locator(payload)
+        old_name = self._safe_get(locator, "name")
+        locator.name = str(name)
+        return {"old_name": old_name, "locator": self._locator_info(locator, self._locator_index(locator)), "done": True}
+
+    def _cue_points(self):
+        cue_points = self._safe_get(self.song(), "cue_points")
+        if cue_points is None:
+            raise ValueError("This Live set does not expose cue_points")
+        return list(cue_points)
+
+    def _locator_info(self, locator, index):
+        return {
+            "index": index,
+            "name": self._safe_get(locator, "name"),
+            "time": self._safe_get(locator, "time"),
+            "is_song_start": self._safe_get(locator, "is_song_start"),
+        }
+
+    def _resolve_locator(self, payload):
+        cue_points = self._cue_points()
+        if "time" in payload:
+            target_time = float(payload["time"])
+            matches = [point for point in cue_points if abs(float(self._safe_get(point, "time", -1)) - target_time) < 0.01]
+            if len(matches) == 1:
+                return matches[0]
+            if matches:
+                raise ValueError("Multiple locators found at beat %s" % target_time)
+            raise ValueError("No locator found at beat %s" % target_time)
+        locator = payload.get("locator")
+        if isinstance(locator, int):
+            return self._locator_by_index(cue_points, locator)
+        text = str(locator).strip()
+        if text.isdigit():
+            return self._locator_by_index(cue_points, int(text))
+        normalized = self._normalize_name(text)
+        matches = [point for point in cue_points if normalized in self._normalize_name(self._safe_get(point, "name", ""))]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise ValueError("Locator %r is ambiguous: %s" % (locator, [self._safe_get(point, "name") for point in matches]))
+        raise ValueError("Unknown locator: %r" % locator)
+
+    def _locator_by_index(self, cue_points, index):
+        if 0 <= index < len(cue_points):
+            return cue_points[index]
+        raise ValueError("Locator index out of range: %s" % index)
+
+    def _locator_index(self, locator):
+        for index, candidate in enumerate(self._cue_points()):
+            if candidate == locator:
+                return index
+        return 0
+
     def _set_routing(self, payload):
         track = self._resolve_track(payload.get("track"))
         direction = str(payload.get("direction", "input")).lower()

@@ -16,7 +16,7 @@ Status: SECOND-PASS AUDIT COMPLETE
 ## Control Surface Evidence
 
 - Bridge: `Codex_AI` Ableton MIDI Remote Script listening on `127.0.0.1:37337`.
-- Live verified responding with `python3 abletonctl.py ping` against Live 12.2.7.
+- Live verified responding with `abletonctl ping` against Live 12.2.7.
 - Generic LOM coverage: `lom-get`, `lom-set`, `lom-call`, and `lom-inspect` for exposed `song`, `application`, `application.view`, `application.browser`, Track, Scene, ClipSlot, Clip, MixerDevice, Device, and vector paths.
 - Mixer/device coverage: `tracks`, `selected`, `select-track`, `devices`, `params`, `set-track`, `set-send`, `set-param`, `set-routing`.
 - Browser/view coverage: `browser-roots`, `browser-children`, `browser-load`, `browser-preview`, `browser-stop-preview`, `show-view`, `hide-view`, `focus-view`, `toggle-browse`.

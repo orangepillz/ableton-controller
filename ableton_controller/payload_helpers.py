@@ -51,7 +51,7 @@ def clip_automation_device_ref_payload(args: argparse.Namespace) -> dict[str, An
     if getattr(args, "device_path", None) is not None:
         payload["device_path"] = args.device_path
     if getattr(args, "device_track", None) is not None:
-        payload["track"] = args.device_track
+        payload["device_track"] = args.device_track
     elif getattr(args, "track", None) is not None:
         payload["track"] = args.track
     if getattr(args, "device", None) is not None:

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_self() {
+  local source source_dir link_target
+  source="${BASH_SOURCE[0]}"
+  while [ -L "$source" ]; do
+    source_dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+    link_target="$(readlink "$source")"
+    case "$link_target" in
+      /*) source="$link_target" ;;
+      *) source="$source_dir/$link_target" ;;
+    esac
+  done
+  cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
+}
+
+python_is_supported() {
+  "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1
+}
+
+find_python() {
+  local candidate resolved
+  for candidate in \
+    /opt/homebrew/opt/python@3.12/libexec/bin/python3 \
+    /opt/homebrew/opt/python@3.11/libexec/bin/python3 \
+    /opt/homebrew/opt/python@3.10/libexec/bin/python3 \
+    /usr/local/opt/python@3.12/libexec/bin/python3 \
+    /usr/local/opt/python@3.11/libexec/bin/python3 \
+    /usr/local/opt/python@3.10/libexec/bin/python3 \
+    python3.12 \
+    python3.11 \
+    python3.10 \
+    python3
+  do
+    if [ -x "$candidate" ]; then
+      resolved="$candidate"
+    elif resolved="$(command -v "$candidate" 2>/dev/null)"; then
+      :
+    else
+      continue
+    fi
+    if python_is_supported "$resolved"; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
+SCRIPT_DIR="$(resolve_self)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+
+if ! PYTHON="$(find_python)"; then
+  printf '%s\n' "abletonctl requires Python 3.10 or newer. Install Homebrew Python or add python3.10+ to PATH." >&2
+  exit 127
+fi
+
+exec "$PYTHON" "$PROJECT_ROOT/abletonctl.py" "$@"

@@ -26,6 +26,15 @@ def build_track_scene_payload(args):
         return {"command": "duplicate_scene", "scene": args.scene}
     if command == "fire-scene":
         return {"command": "fire_scene", "scene": args.scene}
+    if command == "locators":
+        return {"command": "locators"}
+    if command == "set-locator":
+        payload = {"command": "set_locator", "name": args.name}
+        if args.locator is not None:
+            payload["locator"] = args.locator
+        if args.time is not None:
+            payload["time"] = args.time
+        return payload
     if command == "set-routing":
         if args.type is None and args.channel is None:
             raise SystemExit("set-routing needs --type, --channel, or both.")

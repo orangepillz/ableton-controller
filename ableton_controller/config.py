@@ -6,6 +6,11 @@ DEFAULT_APP_NAME = "Ableton Live 12 Suite"
 STOCK_DEVICE_ROOTS = ("instruments", "audio_effects", "midi_effects", "max_for_live")
 
 LOCAL_COMMANDS = {
+    "copilot-intent",
+    "session-snapshot",
+    "workflow-macro",
+    "arrangement-automation-file-get",
+    "arrangement-automation-file-set",
     "hotkey",
     "key-sequence",
     "type-text",
@@ -15,6 +20,7 @@ LOCAL_COMMANDS = {
     "stock-controls",
     "stock-coverage",
     "set-stock-control",
+    "arrangement-automation-get",
     "clip-stock-automation-get",
     "clip-stock-automation-set",
     "clip-stock-automation-clear",

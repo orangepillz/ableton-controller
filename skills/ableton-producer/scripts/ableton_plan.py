@@ -14,7 +14,8 @@ from typing import Any
 
 KNOWN_COMMANDS = {
     "ping", "status", "tracks", "selected", "select-track", "devices", "device-tree",
-    "device-add-stock", "device-move", "device-delete", "params", "stock-devices",
+    "session-snapshot", "copilot-intent", "workflow-macro",
+    "device-add-stock", "device-move", "device-delete", "drum-pad-load", "params", "stock-devices",
     "stock-controls", "stock-coverage", "set-stock-control", "set-track", "set-send",
     "set-param", "tempo", "play", "stop", "continue", "undo", "redo", "hotkey",
     "key-sequence", "type-text", "menu-search", "save", "lom-get", "lom-set",
@@ -22,10 +23,13 @@ KNOWN_COMMANDS = {
     "toggle-browse", "browser-roots", "browser-children", "browser-tree",
     "browser-search", "browser-load", "browser-preview", "browser-stop-preview",
     "create-track", "delete-track", "duplicate-track", "create-scene",
-    "delete-scene", "duplicate-scene", "fire-scene", "set-routing", "clips",
+    "delete-scene", "duplicate-scene", "fire-scene", "locators",
+    "set-locator", "set-routing", "clips",
     "clip-create-midi", "clip-create-audio", "clip-set", "clip-warp",
     "clip-warp-marker-add", "clip-warp-marker-move", "clip-warp-marker-remove",
-    "clip-automation-get", "clip-automation-set", "clip-automation-clear",
+    "clip-automation-get", "clip-automation-set", "arrangement-automation-get",
+    "arrangement-automation-file-get", "arrangement-automation-file-set",
+    "arrangement-automation-set", "arrangement-automation-set-many", "clip-automation-clear",
     "clip-stock-automation-get", "clip-stock-automation-set",
     "clip-stock-automation-clear", "clip-delete", "clip-copy", "clip-move",
     "clip-split", "clip-slots", "fire-clip", "stop-track-clips", "midi-get-notes",
@@ -36,13 +40,14 @@ KNOWN_COMMANDS = {
 
 DESTRUCTIVE_COMMANDS = {
     "delete-track", "delete-scene", "device-delete", "clip-delete", "clip-move",
-    "clip-automation-clear", "clip-stock-automation-clear", "midi-replace-notes",
-    "midi-remove-notes", "midi-clear-notes", "save",
+    "arrangement-automation-file-set", "clip-automation-clear", "clip-stock-automation-clear", "midi-replace-notes",
+    "midi-remove-notes", "midi-clear-notes", "save", "set-locator", "lom-set",
+    "lom-call",
 }
 
 
-def default_abletonctl() -> Path:
-    return Path(__file__).resolve().parents[3] / "abletonctl.py"
+def default_abletonctl() -> str:
+    return "abletonctl"
 
 
 def load_plan(path: str) -> dict[str, Any]:
@@ -101,12 +106,14 @@ def validate_plan(plan: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]
     return normalized, errors, warnings
 
 
-def shell_command(args: list[str], abletonctl: Path, python_cmd: str) -> str:
-    full = [python_cmd, str(abletonctl), *args]
+def shell_command(args: list[str], abletonctl: str, python_cmd: str | None = None) -> str:
+    full = [abletonctl, *args]
+    if python_cmd:
+        full = [python_cmd, *full]
     return " ".join(shlex.quote(part) for part in full)
 
 
-def render_plan(plan: dict[str, Any], abletonctl: Path, python_cmd: str = "python3") -> str:
+def render_plan(plan: dict[str, Any], abletonctl: str = "abletonctl", python_cmd: str | None = None) -> str:
     steps, errors, warnings = validate_plan(plan)
     if errors:
         return "\n".join(["Plan has errors:", *[f"- {error}" for error in errors]])
@@ -146,7 +153,7 @@ def has_destructive_warning(warnings: list[str]) -> bool:
     return bool(warnings)
 
 
-def execute_plan(plan: dict[str, Any], abletonctl: Path, python_cmd: str, allow_destructive: bool) -> int:
+def execute_plan(plan: dict[str, Any], abletonctl: str, python_cmd: str | None, allow_destructive: bool) -> int:
     steps, errors, warnings = validate_plan(plan)
     if errors:
         print(render_plan(plan, abletonctl, python_cmd), file=sys.stderr)
@@ -162,7 +169,10 @@ def execute_plan(plan: dict[str, Any], abletonctl: Path, python_cmd: str, allow_
         if not args:
             continue
         print(shell_command(args, abletonctl, python_cmd), flush=True)
-        result = subprocess.run([python_cmd, str(abletonctl), *args], check=False)
+        command = [abletonctl, *args]
+        if python_cmd:
+            command = [python_cmd, *command]
+        result = subprocess.run(command, check=False)
         if result.returncode != 0:
             return result.returncode
     return 0
@@ -171,8 +181,8 @@ def execute_plan(plan: dict[str, Any], abletonctl: Path, python_cmd: str, allow_
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", help="Path to plan JSON, or '-' for stdin.")
-    parser.add_argument("--abletonctl", type=Path, default=default_abletonctl())
-    parser.add_argument("--python", default="python3", help="Python executable used to run abletonctl.py.")
+    parser.add_argument("--abletonctl", default=default_abletonctl(), help="Ableton CLI command or script path.")
+    parser.add_argument("--python", help="Optional Python executable used when --abletonctl points to a .py script.")
     parser.add_argument("--execute", action="store_true", help="Run the plan instead of rendering it.")
     parser.add_argument("--allow-destructive", action="store_true", help="Permit destructive commands during execution.")
     args = parser.parse_args(argv)

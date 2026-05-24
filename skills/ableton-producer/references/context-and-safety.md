@@ -17,21 +17,27 @@ Maintain this state mentally across an operation and refresh it after edits:
 Start most workflows with:
 
 ```sh
-python3 abletonctl.py ping
-python3 abletonctl.py status
-python3 abletonctl.py tracks
-python3 abletonctl.py selected --devices
+abletonctl session-snapshot
+```
+
+For narrower debugging or when you need separate outputs, use:
+
+```sh
+abletonctl ping
+abletonctl status
+abletonctl tracks
+abletonctl selected --devices
 ```
 
 Then probe the target domain:
 
 ```sh
-python3 abletonctl.py devices --track "Bass"
-python3 abletonctl.py device-tree --track "Bass" --depth 5
-python3 abletonctl.py clips --track "Bass"
-python3 abletonctl.py midi-get-notes --track "Bass" --slot 0 --start 0 --end 4
-python3 abletonctl.py stock-controls --device "Auto Filter"
-python3 abletonctl.py params --track "Bass" --device "Auto Filter"
+abletonctl devices --track "Bass"
+abletonctl device-tree --track "Bass" --depth 5
+abletonctl clips --track "Bass"
+abletonctl midi-get-notes --track "Bass" --slot 0 --start 0 --end 4
+abletonctl stock-controls --device "Auto Filter"
+abletonctl params --track "Bass" --device "Auto Filter"
 ```
 
 ## Targeting Rules
@@ -108,4 +114,4 @@ If a command fails:
 6. If a local macOS command fails, mention Accessibility or focus requirements and switch to a bridge/LOM command when possible.
 7. If the edit partially succeeded, refresh touched state and explain the clean continuation path.
 
-Use `python3 abletonctl.py undo` only when the last command clearly caused the unwanted edit and undo will not erase user work performed after it.
+Use `abletonctl undo` only when the last command clearly caused the unwanted edit and undo will not erase user work performed after it.
