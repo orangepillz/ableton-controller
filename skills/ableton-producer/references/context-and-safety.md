@@ -109,9 +109,9 @@ Require approval:
 - Changes to `SC In`, `SC Trigger`, LFO Tool, sidechain trigger MIDI, or group output routing into/out of `SC In`.
 - `delete-track`, `delete-scene`, `device-delete`, `clip-delete`.
 - `midi-clear-notes`, `midi-replace-notes`, broad `midi-remove-notes`.
-- `clip-automation-clear`, `clip-stock-automation-clear`.
+- `clip-automation-clear`, `clip-stock-automation-clear`, `clip-envelope-clear`.
 - `clip-create-midi --replace`, `clip-create-audio --replace`.
-- `save`, export menu actions, focus-dependent UI automation, unfamiliar `lom-set` or `lom-call`.
+- `save`, export menu actions, `clip-audio-set --reverse`, focus-dependent UI automation, unfamiliar `lom-set` or `lom-call`.
 
 ## Recovery
 

@@ -4,6 +4,7 @@ import argparse
 
 from .parser_args import add_common
 from .parser_browser_lom import add_browser_lom_commands
+from .parser_clip_envelopes import add_clip_envelope_commands
 from .parser_clips import add_clip_commands
 from .parser_core import add_core_commands
 from .parser_devices import add_device_commands
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_browser_lom_commands(sub)
     add_track_scene_commands(sub)
     add_clip_commands(sub)
+    add_clip_envelope_commands(sub)
     add_midi_commands(sub)
 
     raw = sub.add_parser("raw", help="Send a raw JSON request.")

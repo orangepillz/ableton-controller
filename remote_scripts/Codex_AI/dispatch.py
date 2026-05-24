@@ -138,10 +138,16 @@ class CommandDispatcherMixin(object):
             return self._clip_warp_marker_move(payload)
         if command == "clip_warp_marker_remove":
             return self._clip_warp_marker_remove(payload)
+        if command == "clip_focus":
+            return self._clip_focus(payload)
+        if command == "clip_envelope_targets":
+            return self._clip_envelope_targets(payload)
         if command == "clip_automation_get":
             return self._clip_automation_get(payload)
         if command == "clip_automation_set":
             return self._clip_automation_set(payload)
+        if command == "clip_automation_set_many":
+            return self._clip_automation_set_many(payload)
         if command == "clip_automation_clear":
             return self._clip_automation_clear(payload)
         if command == "arrangement_automation_get":

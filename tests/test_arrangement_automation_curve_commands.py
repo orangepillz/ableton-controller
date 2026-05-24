@@ -10,6 +10,13 @@ assert COMMANDS_SPEC is not None and COMMANDS_SPEC.loader is not None
 COMMANDS_SPEC.loader.exec_module(commands)
 AutomationCommandMixin = commands.AutomationCommandMixin
 
+CLIP_COMMANDS_PATH = Path(__file__).resolve().parents[1] / "remote_scripts" / "Codex_AI" / "clip_automation_commands.py"
+CLIP_COMMANDS_SPEC = importlib.util.spec_from_file_location("clip_automation_commands", CLIP_COMMANDS_PATH)
+clip_commands = importlib.util.module_from_spec(CLIP_COMMANDS_SPEC)
+assert CLIP_COMMANDS_SPEC is not None and CLIP_COMMANDS_SPEC.loader is not None
+CLIP_COMMANDS_SPEC.loader.exec_module(clip_commands)
+ClipAutomationCommandMixin = clip_commands.ClipAutomationCommandMixin
+
 HELPERS_PATH = Path(__file__).resolve().parents[1] / "remote_scripts" / "Codex_AI" / "automation_helpers.py"
 HELPERS_SPEC = importlib.util.spec_from_file_location("automation_helpers", HELPERS_PATH)
 helpers = importlib.util.module_from_spec(HELPERS_SPEC)
@@ -176,7 +183,7 @@ def _create_or_replace(events, calls=None):
     return create
 
 
-class _Bridge(AutomationHelperMixin, AutomationCommandMixin):
+class _Bridge(AutomationHelperMixin, ClipAutomationCommandMixin, AutomationCommandMixin):
     def __init__(self, song, application=None):
         self._song = song
         self._application = application or SimpleNamespace(view=SimpleNamespace(show_view=lambda name: None))

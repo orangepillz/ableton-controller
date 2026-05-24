@@ -17,6 +17,13 @@ from stock_device_controls import (
 
 from .als_automation import arrangement_file_get, arrangement_file_set
 from .arrangement_automation import arrangement_automation_events
+from .local_clip_envelopes import (
+    clip_audio_set,
+    clip_envelope_clear,
+    clip_envelope_get,
+    clip_envelope_set,
+    clip_envelope_targets,
+)
 from .copilot_intent import match_copilot_intent
 from .local_automation import applescript_string, run_applescript, run_hotkey, run_menu_search
 from .payload_helpers import clip_automation_device_ref_payload, clip_ref_payload, device_ref_payload
@@ -89,6 +96,16 @@ def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
         return arrangement_file_get(args.set_file, args.track, args.arrangement_start, args.device, args.param)
     if args.command == "arrangement-automation-file-set":
         return arrangement_file_set(args.set_file, args, arrangement_automation_events(args))
+    if args.command == "clip-envelope-targets":
+        return clip_envelope_targets(args, send_local_bridge_command)
+    if args.command == "clip-envelope-get":
+        return clip_envelope_get(args, send_local_bridge_command)
+    if args.command == "clip-envelope-set":
+        return clip_envelope_set(args, send_local_bridge_command)
+    if args.command == "clip-envelope-clear":
+        return clip_envelope_clear(args, send_local_bridge_command)
+    if args.command == "clip-audio-set":
+        return clip_audio_set(args, send_local_bridge_command)
     if args.command == "stock-devices":
         registry = load_registry(args.registry)
         if args.summary:
@@ -139,15 +156,22 @@ def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
         result["stock_control"] = control
         return result
     if args.command == "clip-stock-automation-set":
+        if args.steps is not None and args.events is not None:
+            raise SystemExit("Use only one of clip-stock-automation-set --steps or --events.")
+        if args.steps is None and args.events is None:
+            raise SystemExit("clip-stock-automation-set needs --steps or --events.")
         _registry, device, control = resolve_stock_control(args)
         payload = {
             "command": "clip_automation_set",
             **clip_ref_payload(args),
             **clip_automation_device_ref_payload(args),
             "param": control_parameter_name(control),
-            "steps": args.steps,
             "clear": args.clear,
         }
+        if args.steps is not None:
+            payload["steps"] = args.steps
+        if args.events is not None:
+            payload["events"] = args.events
         result = send_local_bridge_command(args, payload)
         result["stock_device"] = stock_device_listing(device, False)
         result["stock_control"] = control

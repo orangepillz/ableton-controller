@@ -62,8 +62,12 @@ class SerializationMixin(object):
             "ram_mode": self._safe_get(clip, "ram_mode"),
             "sample_length": self._safe_get(clip, "sample_length"),
             "sample_rate": self._safe_get(clip, "sample_rate"),
+            "sample_duration": self._audio_sample_duration(clip),
             "warp_mode": self._safe_get(clip, "warp_mode"),
             "warping": self._safe_get(clip, "warping"),
+            "available_warp_modes": self._serialize(self._safe_get(clip, "available_warp_modes")),
+            "clip_bpm": self._clip_segment_bpm(clip),
+            "has_envelopes": self._safe_get(clip, "has_envelopes"),
         }
 
     def _scene_info(self, scene, index):
@@ -143,6 +147,32 @@ class SerializationMixin(object):
         if hasattr(value, "pitch") and hasattr(value, "start_time"):
             return self._note_info(value)
         return {"type": type(value).__name__, "summary": self._summary(value)}
+
+    def _audio_sample_duration(self, clip):
+        if not self._safe_get(clip, "is_audio_clip", False):
+            return None
+        sample_rate = float(self._safe_get(clip, "sample_rate", 0.0) or 0.0)
+        sample_length = float(self._safe_get(clip, "sample_length", 0.0) or 0.0)
+        if sample_rate <= 0.0 or sample_length <= 0.0:
+            return None
+        return sample_length / sample_rate
+
+    def _clip_segment_bpm(self, clip):
+        if not self._safe_get(clip, "is_audio_clip", False):
+            return None
+        method = getattr(clip, "beat_to_sample_time", None)
+        if callable(method):
+            try:
+                seconds = float(method(1.0)) - float(method(0.0))
+                if seconds > 0.0:
+                    return round(60.0 / seconds, 6)
+            except Exception:
+                pass
+        duration = self._audio_sample_duration(clip)
+        clip_length = float(self._safe_get(clip, "length", 0.0) or 0.0)
+        if duration is not None and duration > 0.0 and clip_length > 0.0:
+            return round(60.0 / (duration / clip_length), 6)
+        return None
 
     def _note_info(self, note):
         keys = (

@@ -10,6 +10,13 @@ assert SPEC is not None and SPEC.loader is not None
 SPEC.loader.exec_module(automation_commands)
 AutomationCommandMixin = automation_commands.AutomationCommandMixin
 
+CLIP_MODULE_PATH = Path(__file__).resolve().parents[1] / "remote_scripts" / "Codex_AI" / "clip_automation_commands.py"
+CLIP_SPEC = importlib.util.spec_from_file_location("clip_automation_commands", CLIP_MODULE_PATH)
+clip_automation_commands = importlib.util.module_from_spec(CLIP_SPEC)
+assert CLIP_SPEC is not None and CLIP_SPEC.loader is not None
+CLIP_SPEC.loader.exec_module(clip_automation_commands)
+ClipAutomationCommandMixin = clip_automation_commands.ClipAutomationCommandMixin
+
 HELPER_PATH = Path(__file__).resolve().parents[1] / "remote_scripts" / "Codex_AI" / "automation_helpers.py"
 HELPER_SPEC = importlib.util.spec_from_file_location("automation_helpers", HELPER_PATH)
 automation_helpers = importlib.util.module_from_spec(HELPER_SPEC)
@@ -218,7 +225,7 @@ def _envelope(name, parameter, inserted_steps):
     )
 
 
-class _Bridge(AutomationHelperMixin, AutomationCommandMixin):
+class _Bridge(AutomationHelperMixin, ClipAutomationCommandMixin, AutomationCommandMixin):
     def __init__(self, song, application=None):
         self._song = song
         self._application = application or SimpleNamespace(view=SimpleNamespace(show_view=lambda name: None))

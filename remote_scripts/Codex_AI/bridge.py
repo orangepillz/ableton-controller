@@ -11,6 +11,8 @@ try:
     from .automation_helpers import AutomationHelperMixin
     from .browser_commands import BrowserCommandMixin
     from .clip_commands import ClipCommandMixin
+    from .clip_automation_commands import ClipAutomationCommandMixin
+    from .clip_envelope_commands import ClipEnvelopeCommandMixin
     from .clip_refs import ClipReferenceMixin
     from .clip_warp_commands import ClipWarpCommandMixin
     from .device_commands import DeviceCommandMixin
@@ -30,6 +32,8 @@ except ImportError:
     from automation_helpers import AutomationHelperMixin
     from browser_commands import BrowserCommandMixin
     from clip_commands import ClipCommandMixin
+    from clip_automation_commands import ClipAutomationCommandMixin
+    from clip_envelope_commands import ClipEnvelopeCommandMixin
     from clip_refs import ClipReferenceMixin
     from clip_warp_commands import ClipWarpCommandMixin
     from device_commands import DeviceCommandMixin
@@ -63,7 +67,9 @@ class CodexBridge(
     DeviceCommandMixin,
     DrumPadCommandMixin,
     ClipCommandMixin,
+    ClipEnvelopeCommandMixin,
     ClipWarpCommandMixin,
+    ClipAutomationCommandMixin,
     AutomationCommandMixin,
     BrowserCommandMixin,
     TrackCommandMixin,

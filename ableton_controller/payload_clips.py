@@ -65,7 +65,7 @@ def build_clip_payload(args):
         return payload
     if command == "clip-warp":
         payload = {"command": "clip_warp", **clip_ref_payload(args)}
-        for name in ("warping", "warp_mode", "gain", "pitch_coarse", "pitch_fine", "ram_mode"):
+        for name in ("warping", "warp_mode", "gain", "pitch_coarse", "pitch_fine", "ram_mode", "clip_bpm"):
             add_if_not_none(payload, name, getattr(args, name))
         return payload
     if command == "clip-warp-marker-add":
@@ -109,6 +109,13 @@ def build_clip_payload(args):
         add_if_not_none(payload, "steps", args.steps)
         add_if_not_none(payload, "events", args.events)
         return payload
+    if command == "clip-automation-set-many":
+        return {
+            "command": "clip_automation_set_many",
+            **clip_ref_payload(args),
+            **clip_automation_device_ref_payload(args),
+            "lanes": arrangement_automation_lanes(args.lanes),
+        }
     if command == "arrangement-automation-get":
         payload = {
             "command": "arrangement_automation_get",

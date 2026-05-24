@@ -10,6 +10,13 @@ assert SPEC is not None and SPEC.loader is not None
 SPEC.loader.exec_module(automation_commands)
 AutomationCommandMixin = automation_commands.AutomationCommandMixin
 
+CLIP_MODULE_PATH = Path(__file__).resolve().parents[1] / "remote_scripts" / "Codex_AI" / "clip_automation_commands.py"
+CLIP_SPEC = importlib.util.spec_from_file_location("clip_automation_commands", CLIP_MODULE_PATH)
+clip_automation_commands = importlib.util.module_from_spec(CLIP_SPEC)
+assert CLIP_SPEC is not None and CLIP_SPEC.loader is not None
+CLIP_SPEC.loader.exec_module(clip_automation_commands)
+ClipAutomationCommandMixin = clip_automation_commands.ClipAutomationCommandMixin
+
 HELPER_PATH = Path(__file__).resolve().parents[1] / "remote_scripts" / "Codex_AI" / "automation_helpers.py"
 HELPER_SPEC = importlib.util.spec_from_file_location("automation_helpers", HELPER_PATH)
 automation_helpers = importlib.util.module_from_spec(HELPER_SPEC)
@@ -129,6 +136,51 @@ class AutomationCommandTests(unittest.TestCase):
         self.assertEqual(clip_view_calls, [parameter])
         self.assertFalse(result["has_envelope"])
 
+    def test_clip_automation_set_many_writes_multiple_lanes(self):
+        song = SimpleNamespace(view=SimpleNamespace(selected_track=None, detail_clip=None))
+        track = SimpleNamespace(name="Synth")
+        clip = SimpleNamespace(is_arrangement_clip=False, length=4.0, canonical_parent=track)
+        frequency = SimpleNamespace(name="Frequency", min=0.0, max=1.0, value=0.0)
+        resonance = SimpleNamespace(name="Resonance", min=0.0, max=1.0, value=0.0)
+        inserted = []
+        envelopes = {}
+
+        def automation_envelope(_clip, parameter, create):
+            parameter_key = id(parameter)
+            if parameter_key in envelopes:
+                return envelopes[parameter_key]
+            if not create:
+                return None
+            envelope = SimpleNamespace(
+                parameter=parameter,
+                insert_step=lambda time, duration, value, name=parameter.name: inserted.append((name, time, duration, value)),
+                value_at_time=lambda time: 0.5,
+            )
+            envelopes[parameter_key] = envelope
+            return envelope
+
+        bridge = _Bridge(song)
+        bridge._resolve_clip_ref = lambda payload: {"kind": "session", "track": track, "clip": clip}
+        bridge._resolve_parameter_ref = lambda payload: {"Frequency": frequency, "Resonance": resonance}[payload["param"]]
+        bridge._automation_envelope = automation_envelope
+        bridge._clip_ref_info = lambda ref: {"kind": ref["kind"]}
+        bridge._clip_info = lambda clip: {"name": "clip"}
+        bridge._parameter_info = lambda parameter: {"name": parameter.name}
+
+        result = bridge._clip_automation_set_many(
+            {
+                "device": "Auto Filter",
+                "lanes": [
+                    {"param": "Frequency", "steps": [{"time": 0, "duration": 1, "normalized": 0.25}]},
+                    {"param": "Resonance", "steps": [{"time": 1, "duration": 1, "normalized": 0.75}]},
+                ],
+            }
+        )
+
+        self.assertEqual(inserted, [("Frequency", 0.0, 1.0, 0.25), ("Resonance", 1.0, 1.0, 0.75)])
+        self.assertEqual([lane["parameter"]["name"] for lane in result["lanes"]], ["Frequency", "Resonance"])
+        self.assertTrue(result["done"])
+
     def test_automation_envelope_creation_retries_after_showing_envelope(self):
         song = SimpleNamespace(view=SimpleNamespace(selected_track=None, detail_clip=None))
         app_view_calls = []
@@ -157,7 +209,7 @@ class AutomationCommandTests(unittest.TestCase):
         self.assertEqual(app_view_calls, [])
 
 
-class _Bridge(AutomationHelperMixin, AutomationCommandMixin):
+class _Bridge(AutomationHelperMixin, ClipAutomationCommandMixin, AutomationCommandMixin):
     def __init__(self, song, application=None):
         self._song = song
         self._application = application or SimpleNamespace(view=SimpleNamespace(show_view=lambda name: None))

@@ -24,6 +24,11 @@ LOCAL_COMMANDS = {
     "clip-stock-automation-get",
     "clip-stock-automation-set",
     "clip-stock-automation-clear",
+    "clip-envelope-targets",
+    "clip-envelope-get",
+    "clip-envelope-set",
+    "clip-envelope-clear",
+    "clip-audio-set",
 }
 
 MODIFIER_NAMES = {

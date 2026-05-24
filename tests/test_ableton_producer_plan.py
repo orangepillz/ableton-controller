@@ -48,6 +48,19 @@ class AbletonProducerPlanTests(unittest.TestCase):
 
         self.assertEqual(errors, ["step 1: unknown abletonctl command 'make-drop-huge'"])
 
+    def test_clip_envelope_commands_are_known(self):
+        _, errors, warnings = self.module.validate_plan(
+            {
+                "commands": [
+                    {"args": ["clip-envelope-set", "--track", "Lead", "--slot", 0, "--target", "midi-cc"]},
+                    {"args": ["clip-audio-set", "--track", "Vocal", "--slot", 0, "--gain", 0.7]},
+                ]
+            }
+        )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
     def test_destructive_command_warns(self):
         _, errors, warnings = self.module.validate_plan({"commands": [{"args": ["clip-delete", "--track", "Bass"]}]})
 

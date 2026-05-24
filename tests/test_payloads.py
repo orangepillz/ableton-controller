@@ -96,6 +96,46 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(payload["steps"], [{"time": 0, "duration": 1, "normalized": 0.2}])
         self.assertIs(payload["clear"], True)
 
+    def test_clip_automation_set_many_payload(self):
+        payload = self.payload_for(
+            "clip-automation-set-many",
+            "--track",
+            "Synth",
+            "--slot",
+            "0",
+            "--device",
+            "Auto Filter",
+            "--lanes",
+            '[{"param":"Frequency","duration":4,"from_normalized":0.2,"to_normalized":0.8}]',
+        )
+        self.assertEqual(payload["command"], "clip_automation_set_many")
+        self.assertEqual(payload["track"], "Synth")
+        self.assertEqual(payload["device"], "Auto Filter")
+        self.assertEqual(
+            payload["lanes"],
+            [
+                {
+                    "param": "Frequency",
+                    "steps": [
+                        {"time": 0.0, "duration": 0.5, "normalized": 0.2},
+                        {"time": 0.5, "duration": 0.5, "normalized": 0.285714},
+                        {"time": 1.0, "duration": 0.5, "normalized": 0.371429},
+                        {"time": 1.5, "duration": 0.5, "normalized": 0.457143},
+                        {"time": 2.0, "duration": 0.5, "normalized": 0.542857},
+                        {"time": 2.5, "duration": 0.5, "normalized": 0.628571},
+                        {"time": 3.0, "duration": 0.5, "normalized": 0.714286},
+                        {"time": 3.5, "duration": 0.5, "normalized": 0.8},
+                    ],
+                }
+            ],
+        )
+
+    def test_clip_warp_payload_accepts_clip_bpm(self):
+        self.assertEqual(
+            self.payload_for("clip-warp", "--track", "Audio", "--slot", "0", "--clip-bpm", "128"),
+            {"command": "clip_warp", "track": "Audio", "slot": 0, "clip_bpm": 128.0},
+        )
+
     def test_locator_payloads(self):
         self.assertEqual(self.payload_for("locators"), {"command": "locators"})
         self.assertEqual(

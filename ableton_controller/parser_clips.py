@@ -62,6 +62,7 @@ def add_clip_commands(sub):
     clip_warp.add_argument("--pitch-coarse", type=int)
     clip_warp.add_argument("--pitch-fine", type=float)
     clip_warp.add_argument("--ram-mode", type=bool_arg)
+    clip_warp.add_argument("--clip-bpm", type=float, help="Set the first warped segment tempo by pinning beat 1 to the requested BPM.")
 
     warp_add = sub.add_parser("clip-warp-marker-add", help="Add a warp marker to a warped audio clip.")
     add_clip_ref_args(warp_add)
@@ -92,6 +93,19 @@ def add_clip_commands(sub):
     automation_set.add_argument("--steps", type=json_arg, help="JSON list of {time,duration,value|normalized} objects.")
     automation_set.add_argument("--events", type=json_arg, help="JSON list of breakpoint {time,value|normalized,curve_coefficients?} objects.")
     automation_set.add_argument("--clear", action="store_true", help="Clear this parameter's existing envelope before inserting automation.")
+
+    automation_set_many = sub.add_parser(
+        "clip-automation-set-many",
+        help="Write multiple clip automation lanes in one pass.",
+    )
+    add_clip_ref_args(automation_set_many)
+    add_clip_automation_device_args(automation_set_many)
+    automation_set_many.add_argument(
+        "--lanes",
+        required=True,
+        type=json_arg,
+        help="JSON list of lane specs with param plus steps, events, or duration/from/to ramp fields.",
+    )
 
     arrangement_automation_get = sub.add_parser("arrangement-automation-get", help="Read an Arrangement clip automation lane.")
     arrangement_automation_get.add_argument("--track", required=True, type=track_value)
@@ -154,7 +168,8 @@ def add_clip_commands(sub):
     add_stock_root_arg(stock_automation_set)
     stock_automation_set.add_argument("--stock-device", help="Registry device name/path/slug. Defaults to --device when that is a name.")
     stock_automation_set.add_argument("--control", required=True, help="Control name, slug, alias, or parameter index.")
-    stock_automation_set.add_argument("--steps", required=True, type=json_arg, help="JSON list of {time,duration,value|normalized} objects.")
+    stock_automation_set.add_argument("--steps", type=json_arg, help="JSON list of {time,duration,value|normalized} objects.")
+    stock_automation_set.add_argument("--events", type=json_arg, help="JSON list of breakpoint {time,value|normalized,curve_coefficients?} objects.")
     stock_automation_set.add_argument("--clear", action="store_true", help="Clear this parameter's existing envelope before inserting steps.")
 
     stock_automation_clear = sub.add_parser("clip-stock-automation-clear", help="Clear clip automation using a stock-device control alias.")

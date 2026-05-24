@@ -186,6 +186,12 @@ abletonctl device-add-stock --target-track "Mid Bass" --path "audio_effects/Auto
 abletonctl clip-stock-automation-set --track "Mid Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency --clear --steps '[{"time":0,"duration":0.5,"normalized":0.22},{"time":0.5,"duration":0.5,"normalized":0.78},{"time":1,"duration":1,"normalized":0.35},{"time":2,"duration":2,"normalized":0.68}]'
 ```
 
+For coupled Session clip lanes, write them together:
+
+```sh
+abletonctl clip-automation-set-many --track "Mid Bass" --slot 0 --device "Auto Filter" --lanes '[{"param":"Frequency","events":[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":4,"normalized":0.85}],"clear":true},{"param":"Resonance","steps":[{"time":0,"duration":4,"normalized":0.32}],"clear":true}]'
+```
+
 For coupled Arrangement filter sweeps, write the related lanes together and verify
 each lane with clip-relative times:
 
@@ -213,6 +219,40 @@ abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 8 
 
 Use `arrangement-automation-file-get` to audit saved `.als` curve fields, and
 `arrangement-automation-file-set` only for offline repair when Live is not running.
+
+## Clip Envelopes And Audio Clip Properties
+
+Use `clip-envelope-targets` before pitch bend, MIDI CC, or audio clip envelope work:
+
+```sh
+abletonctl clip-envelope-targets
+abletonctl clip-envelope-targets --track "Vocal Chop" --arrangement-start 32
+```
+
+For MIDI pitch bend, mod wheel, pressure, or a configured CC Control Custom A-M lane,
+write a CC Control-backed clip envelope. This works while Live is open and accepts
+the same steps/events shape as other clip automation commands:
+
+```sh
+abletonctl clip-envelope-set --track "Lead" --slot 0 --target midi-cc --ensure-midi-cc-device --midi-control pitch-bend --clear --events '[{"time":0,"value":0},{"time":2,"value":12},{"time":4,"value":0}]'
+abletonctl clip-envelope-get --track "Lead" --slot 0 --target midi-cc --midi-control pitch-bend --times 0,1,2,3,4
+```
+
+Native MIDI Ctrl lanes for arbitrary CC numbers and native audio clip envelopes
+such as Transposition, Gain, Sample Offset, Grain Size, Flux, and Transient
+Envelope are visible in Live's UI but are not public `DeviceParameter` targets.
+Do not promise direct breakpoint writes for those; use device-backed automation,
+CC Control lanes, or a focused UI workflow when the user accepts that tradeoff.
+
+For static audio clip properties:
+
+```sh
+abletonctl clip-audio-set --track "Vocal Chop" --arrangement-start 32 --gain 0.72 --pitch-coarse -7 --warp-mode texture --clip-bpm 128
+abletonctl clip-audio-set --track "Impact" --arrangement-start 64 --reverse
+```
+
+`clip-audio-set --reverse` focuses the clip and runs Live's Reverse Sample menu
+action; verify focus first and treat it as UI automation.
 
 ## Drum Rack And Sampler Work
 

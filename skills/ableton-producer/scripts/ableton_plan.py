@@ -29,9 +29,11 @@ KNOWN_COMMANDS = {
     "clip-warp-marker-add", "clip-warp-marker-move", "clip-warp-marker-remove",
     "clip-automation-get", "clip-automation-set", "arrangement-automation-get",
     "arrangement-automation-file-get", "arrangement-automation-file-set",
-    "arrangement-automation-set", "arrangement-automation-set-many", "clip-automation-clear",
+    "arrangement-automation-set", "arrangement-automation-set-many", "clip-automation-set-many", "clip-automation-clear",
     "clip-stock-automation-get", "clip-stock-automation-set",
-    "clip-stock-automation-clear", "clip-delete", "clip-copy", "clip-move",
+    "clip-stock-automation-clear", "clip-envelope-targets", "clip-envelope-get",
+    "clip-envelope-set", "clip-envelope-clear", "clip-audio-set",
+    "clip-delete", "clip-copy", "clip-move",
     "clip-split", "clip-slots", "fire-clip", "stop-track-clips", "midi-get-notes",
     "midi-add-notes", "midi-replace-notes", "midi-update-notes",
     "midi-remove-notes", "midi-clear-notes", "midi-transform-notes",
@@ -40,7 +42,8 @@ KNOWN_COMMANDS = {
 
 DESTRUCTIVE_COMMANDS = {
     "delete-track", "delete-scene", "device-delete", "clip-delete", "clip-move",
-    "arrangement-automation-file-set", "clip-automation-clear", "clip-stock-automation-clear", "midi-replace-notes",
+    "arrangement-automation-file-set", "clip-automation-clear", "clip-stock-automation-clear",
+    "clip-envelope-clear", "midi-replace-notes",
     "midi-remove-notes", "midi-clear-notes", "save", "set-locator", "lom-set",
     "lom-call",
 }

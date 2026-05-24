@@ -250,9 +250,19 @@ abletonctl clip-set --track "Codex MIDI" --slot 0 --loop-start 0 --loop-end 2 --
 ```
 
 The public Live API supports MIDI note pitch, timing, velocity, mute, probability,
-velocity deviation, and release velocity. MIDI Ctrl/Pitch Bend clip-envelope drawing is
-not exposed by the supported Live Object Model, so use device/parameter automation or
-recorded MIDI controller data for pitch-bend envelopes.
+velocity deviation, and release velocity. For MIDI pitch bend, mod wheel, pressure,
+or custom CC Control lanes, write clip envelopes through Live's stock CC Control device:
+
+```sh
+abletonctl clip-envelope-targets
+abletonctl clip-envelope-set --track "Codex MIDI" --slot 0 --target midi-cc --ensure-midi-cc-device --midi-control pitch-bend --clear --events '[{"time":0,"value":0},{"time":2,"value":12},{"time":4,"value":0}]'
+abletonctl clip-envelope-get --track "Codex MIDI" --slot 0 --target midi-cc --midi-control pitch-bend --times 0,1,2,3,4
+```
+
+Native MIDI Ctrl envelopes for arbitrary CC numbers are cataloged by
+`clip-envelope-targets`, but Live does not expose those targets as public
+`DeviceParameter` objects. Use CC Control direct lanes, configured Custom A-M lanes,
+or device/parameter clip automation while Live is open.
 
 Create and warp audio clips:
 
@@ -261,6 +271,9 @@ abletonctl create-track --type audio --name "Codex Audio"
 abletonctl clip-create-audio --track "Codex Audio" --file "/absolute/path/to/loop.wav" --start 96 --warping true --warp-mode beats
 abletonctl clip-warp --track "Codex Audio" --arrangement-start 96
 abletonctl clip-warp --track "Codex Audio" --arrangement-start 96 --warping true --warp-mode complex-pro --pitch-coarse -12
+abletonctl clip-warp --track "Codex Audio" --arrangement-start 96 --warping true --clip-bpm 128
+abletonctl clip-audio-set --track "Codex Audio" --arrangement-start 96 --gain 0.7 --pitch-coarse -5 --warp-mode texture --clip-bpm 128
+abletonctl clip-audio-set --track "Codex Audio" --arrangement-start 96 --reverse
 abletonctl clip-warp-marker-add --track "Codex Audio" --arrangement-start 96 --beat-time 4 --sample-time 3.85
 abletonctl clip-warp-marker-move --track "Codex Audio" --arrangement-start 96 --beat-time 4 --to-beat 4.25
 abletonctl clip-warp-marker-remove --track "Codex Audio" --arrangement-start 96 --beat-time 4.25
@@ -270,12 +283,15 @@ Warp modes can be passed by name (`beats`, `tones`, `texture`, `repitch`,
 `complex`, `rex`, `complex-pro`) or by their Live API index (`0` through `6`).
 For marker adds, `--sample-time` is optional; when omitted, the bridge
 interpolates from the current marker map to preserve playback timing. Marker
-commands require the clip's Warp switch to already be on.
+commands require the clip's Warp switch to already be on. `clip-audio-set --reverse`
+focuses the clip and runs Live's Reverse Sample menu command, so it uses macOS UI
+automation but does not require restarting Live.
 
 Automate device parameters inside Session or Arrangement clips:
 
 ```sh
 abletonctl clip-automation-set --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.15},{"time":1,"duration":1,"normalized":0.85}]'
+abletonctl clip-automation-set-many --track "Codex Audio" --slot 0 --device "Auto Filter" --lanes '[{"param":"Frequency","events":[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":4,"normalized":0.85}],"clear":true},{"param":"Resonance","steps":[{"time":0,"duration":4,"normalized":0.35}],"clear":true}]'
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --steps 8 --clear
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out --clear
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --events '[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":16,"normalized":0.95}]' --clear
@@ -288,6 +304,7 @@ abletonctl clip-automation-get --track "Codex Audio" --slot 0 --device "Auto Fil
 abletonctl clip-automation-clear --track "Codex Audio" --slot 0 --device "Auto Filter" --param Frequency
 abletonctl clip-stock-automation-set --track "Codex MIDI" --slot 0 --device Pitch --stock-device "midi_effects/Pitch" --control Pitch --clear --steps '[{"time":0,"duration":1,"value":12},{"time":1,"duration":1,"value":-12}]'
 abletonctl clip-stock-automation-get --track "Codex MIDI" --slot 0 --device Pitch --stock-device "midi_effects/Pitch" --control Pitch --times 0,0.5,1.5
+abletonctl clip-envelope-set --track "Codex MIDI" --slot 0 --target midi-cc --midi-control mod-wheel --events '[{"time":0,"value":0},{"time":4,"value":127}]' --clear
 ```
 
 Automation steps and breakpoint events accept raw `value` or normalized `0..1` values.
@@ -298,6 +315,11 @@ clip-relative event times. Use `arrangement-automation-file-get` to inspect save
 breakpoint events and curve coefficients, and `arrangement-automation-file-set` only for
 offline repair. Nested rack devices can be automated with `--device-path`, or with
 `--device-track` plus a top-level device name.
+Audio clip native envelopes such as Transposition, Gain, Sample Offset, Grain Size,
+Flux, and Beats-mode Transient Envelope are cataloged as UI-only because the public
+Live Object Model does not expose them as `DeviceParameter` automation targets.
+Static audio clip properties that are exposed by LOM are covered by `clip-audio-set`
+and `clip-warp`.
 `arrangement-automation-set` writes Arrangement clip lanes through the bridge's dedicated
 Arrangement automation path. On MIDI Arrangement clips, the bridge can create a missing
 lane by staging a temporary Session clip, duplicating it back to Arrangement, and cleaning

@@ -136,6 +136,7 @@ abletonctl clip-create-midi --track "Bass" --slot 0 --length 4 --name "Call Bass
 abletonctl clip-create-midi --track "Bass" --start 64 --length 8 --name "Drop Bass"
 abletonctl clip-create-audio --track "Riser" --file "/absolute/path/riser.wav" --start 56 --warping true --warp-mode complex-pro
 abletonctl clip-set --track "Bass" --slot 0 --looping true --loop-start 0 --loop-end 4 --end-marker 4
+abletonctl clip-audio-set --track "Vocal Chop" --arrangement-start 32 --gain 0.72 --pitch-coarse -7 --warp-mode texture --clip-bpm 128
 abletonctl clip-copy --source-track "Bass" --source-slot 0 --dest-track "Bass" --dest-start 64
 abletonctl clip-split --track "Bass" --arrangement-start 64 --time 68
 ```
@@ -144,11 +145,13 @@ Audio warp:
 
 ```sh
 abletonctl clip-warp --track "Vocal Chop" --arrangement-start 32 --warping true --warp-mode complex-pro --pitch-coarse -12
+abletonctl clip-warp --track "Vocal Chop" --arrangement-start 32 --warping true --clip-bpm 128
 abletonctl clip-warp-marker-add --track "Break" --arrangement-start 16 --beat-time 4 --sample-time 3.85
 abletonctl clip-warp-marker-move --track "Break" --arrangement-start 16 --beat-time 4 --to-beat 4.25
 ```
 
 Warp modes: `beats`, `tones`, `texture`, `repitch`, `complex`, `rex`, `complex-pro`.
+Use `clip-audio-set --reverse` for Reverse Sample; it uses focused menu automation.
 
 ## MIDI Notes
 
@@ -173,6 +176,8 @@ cycle is required. Use saved-set commands only for offline inspection or repair.
 
 ```sh
 abletonctl clip-stock-automation-set --track "Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.18},{"time":1,"duration":1,"normalized":0.72}]'
+abletonctl clip-automation-set-many --track "Bass" --slot 0 --device "Auto Filter" --lanes '[{"param":"Frequency","events":[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":4,"normalized":0.85}],"clear":true},{"param":"Resonance","steps":[{"time":0,"duration":4,"normalized":0.35}],"clear":true}]'
+abletonctl clip-envelope-set --track "Lead" --slot 0 --target midi-cc --ensure-midi-cc-device --midi-control pitch-bend --clear --events '[{"time":0,"value":0},{"time":2,"value":12},{"time":4,"value":0}]'
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --steps 8 --clear
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --events '[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":16,"normalized":0.95}]' --clear
 abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","duration":16,"from_normalized":0.2,"to_normalized":0.95,"curve":"ease-in-out","clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
@@ -185,6 +190,7 @@ abletonctl clip-stock-automation-clear --track "Bass" --slot 0 --device "Auto Fi
 ```
 
 Clip automation is preferred for repeatable bass movement, filter sweeps, fakeouts, fills, and transitions.
+Use `clip-envelope-targets` for MIDI/audio clip envelope discovery. Pitch bend, mod wheel, pressure, and configured CC Control Custom A-M lanes can be written with `clip-envelope-set --target midi-cc`; arbitrary native MIDI Ctrl lanes and native audio clip envelopes are cataloged but not public LOM `DeviceParameter` targets.
 Use `arrangement-automation-set` when the request describes a buildup, drop, fakeout, or transition over an Arrangement range and a clip already exists at `--arrangement-start`.
 Use `arrangement-automation-set-many` for coupled lanes on the same MIDI Arrangement clip, especially cutoff plus resonance, because missing or hidden Arrangement lanes can be materialized together without discarding the first lane.
 For a request like "add a curve at bar 17" on a clip starting at beat 8, convert to clip-relative time `9` in the event JSON.

@@ -18,6 +18,8 @@ class ClipWarpCommandMixin(object):
             if key in payload:
                 setattr(clip, attr, payload[key])
                 changed[attr] = self._safe_get(clip, attr)
+        if "clip_bpm" in payload:
+            changed["clip_bpm"] = self._set_clip_segment_bpm(clip, float(payload["clip_bpm"]))
         return self._clip_warp_info(ref, changed)
 
     def _clip_warp_marker_add(self, payload):
@@ -56,4 +58,28 @@ class ClipWarpCommandMixin(object):
             "changed": changed or {},
             "clip": self._clip_info(clip),
             "warp_markers": self._warp_marker_infos(clip),
+        }
+
+    def _set_clip_segment_bpm(self, clip, bpm):
+        self._ensure_warped_audio_clip(clip)
+        if bpm <= 0.0:
+            raise ValueError("clip_bpm must be greater than 0")
+        beat_time = 1.0
+        sample_time = 60.0 / bpm
+        sample_duration = self._audio_sample_duration(clip)
+        if sample_duration is not None and sample_duration > 0.0:
+            sample_time = max(0.0, min(sample_time, sample_duration))
+        existing = self._find_warp_marker(clip, beat_time)
+        if existing is not None:
+            try:
+                clip.remove_warp_marker(float(existing.get("beat_time", beat_time)))
+            except Exception:
+                pass
+        marker = self._add_warp_marker(clip, beat_time, sample_time)
+        return {
+            "requested": bpm,
+            "actual": self._clip_segment_bpm(clip),
+            "beat_time": beat_time,
+            "sample_time": sample_time,
+            "marker": marker,
         }
