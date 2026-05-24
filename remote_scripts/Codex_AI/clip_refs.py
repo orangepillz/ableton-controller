@@ -205,6 +205,56 @@ class ClipReferenceMixin(object):
         self._apply_clip_look(self._clip_info(source), target, self._safe_get(source, "name", ""))
         self._add_note_dicts(target, self._midi_note_dicts(source))
 
+    def _copy_audio_clip_contents(self, source, target):
+        source_info = self._clip_info(source)
+        self._apply_clip_look(source_info, target, self._safe_get(source, "name", ""))
+        for attr in (
+            "warping",
+            "warp_mode",
+            "gain",
+            "pitch_coarse",
+            "pitch_fine",
+            "ram_mode",
+        ):
+            self._set_optional_clip_property(target, attr, source_info.get(attr))
+        self._copy_audio_marker_properties(source_info, target)
+        self._copy_audio_warp_markers(source, target)
+
+    def _copy_audio_marker_properties(self, source_info, target):
+        end_marker = source_info.get("end_marker")
+        if end_marker is None and source_info.get("length") is not None:
+            start_marker = source_info.get("start_marker") or 0.0
+            try:
+                end_marker = float(start_marker) + float(source_info["length"])
+            except Exception:
+                end_marker = None
+        marker_values = {
+            "end_marker": end_marker,
+            "start_marker": source_info.get("start_marker"),
+            "loop_end": source_info.get("loop_end"),
+            "loop_start": source_info.get("loop_start"),
+        }
+        for attr in ("end_marker", "start_marker", "loop_end", "loop_start"):
+            self._set_optional_clip_property(target, attr, marker_values.get(attr))
+
+    def _copy_audio_warp_markers(self, source, target):
+        if not self._safe_get(source, "warping", False):
+            return
+        for marker in self._warp_marker_infos(source):
+            beat_time = marker.get("beat_time")
+            if beat_time is None:
+                continue
+            self._replace_audio_warp_marker(target, beat_time, marker.get("sample_time"))
+
+    def _replace_audio_warp_marker(self, clip, beat_time, sample_time):
+        existing = self._find_warp_marker(clip, beat_time)
+        if existing is not None:
+            try:
+                clip.remove_warp_marker(float(existing.get("beat_time", beat_time)))
+            except Exception:
+                pass
+        self._add_warp_marker(clip, float(beat_time), sample_time)
+
     def _apply_clip_look(self, info, clip, name):
         self._set_optional_clip_property(clip, "name", name)
         self._set_optional_clip_property(clip, "color", info.get("color"))

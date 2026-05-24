@@ -155,8 +155,8 @@ class AutomationCommandMixin(object):
     def _materialize_arrangement_automation_lanes(self, ref, items):
         source = ref["clip"]
         track = ref.get("track") or self._safe_get(source, "canonical_parent")
-        if not self._safe_get(source, "is_midi_clip", False):
-            raise ValueError("Live cannot create Arrangement envelopes in place; the safe materialization fallback supports MIDI clips only")
+        if not self._safe_get(source, "is_midi_clip", False) and not self._safe_get(source, "is_audio_clip", False):
+            raise ValueError("Live cannot create Arrangement envelopes in place for this clip type")
         self._ensure_materialization_can_replace_lanes(source, items)
         _slot_index, slot = self._empty_session_slot(track)
         clip_start = float(self._safe_get(source, "start_time", 0.0))
@@ -164,9 +164,7 @@ class AutomationCommandMixin(object):
         self.song().begin_undo_step()
         created = False
         try:
-            slot.create_clip(clip_length)
-            temp_clip = slot.clip
-            self._copy_midi_clip_contents(source, temp_clip)
+            temp_clip = self._create_materialization_session_clip(slot, source, clip_length)
             self._set_optional_clip_property(temp_clip, "name", self._safe_get(source, "name", ""))
             lane_results = []
             for item in items:
@@ -190,6 +188,23 @@ class AutomationCommandMixin(object):
             if created and slot.has_clip:
                 slot.delete_clip()
             self.song().end_undo_step()
+
+    def _create_materialization_session_clip(self, slot, source, clip_length):
+        if self._safe_get(source, "is_midi_clip", False):
+            slot.create_clip(clip_length)
+            temp_clip = slot.clip
+            self._copy_midi_clip_contents(source, temp_clip)
+            return temp_clip
+        if self._safe_get(source, "is_audio_clip", False):
+            file_path = str(self._safe_get(source, "file_path", "") or "").strip()
+            if not file_path:
+                raise ValueError("Audio Arrangement clip cannot be materialized because Live did not expose its file_path")
+            temp_clip = slot.create_audio_clip(file_path)
+            if temp_clip is None:
+                temp_clip = slot.clip
+            self._copy_audio_clip_contents(source, temp_clip)
+            return temp_clip
+        raise ValueError("Live cannot create Arrangement envelopes in place for this clip type")
 
     def _ensure_materialization_can_replace_lanes(self, clip, items):
         envelopes = list(self._safe_get(clip, "automation_envelopes", []) or [])

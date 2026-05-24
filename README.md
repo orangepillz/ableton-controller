@@ -321,11 +321,13 @@ Live Object Model does not expose them as `DeviceParameter` automation targets.
 Static audio clip properties that are exposed by LOM are covered by `clip-audio-set`
 and `clip-warp`.
 `arrangement-automation-set` writes Arrangement clip lanes through the bridge's dedicated
-Arrangement automation path. On MIDI Arrangement clips, the bridge can create a missing
-lane by staging a temporary Session clip, duplicating it back to Arrangement, and cleaning
-up the temporary slot. Use `arrangement-automation-set-many` when multiple missing lanes
-must be created together on the same MIDI Arrangement clip, so the materialization pass can
-write all intended lanes at once. `arrangement-automation-get` samples the lane with
+Arrangement automation path. On MIDI and audio Arrangement clips, the bridge can create
+missing device-parameter lanes by staging a temporary Session clip, duplicating it back to
+Arrangement, and cleaning up the temporary slot. Audio materialization reloads the source
+`file_path` and preserves exposed playback properties before writing automation. Use
+`arrangement-automation-set-many` when multiple missing lanes must be created together on
+the same Arrangement clip, so the materialization pass can write all intended lanes at
+once. `arrangement-automation-get` samples the lane with
 clip-relative times.
 
 Send a raw JSON command:

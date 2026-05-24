@@ -193,7 +193,10 @@ abletonctl clip-automation-set-many --track "Mid Bass" --slot 0 --device "Auto F
 ```
 
 For coupled Arrangement filter sweeps, write the related lanes together and verify
-each lane with clip-relative times:
+each lane with clip-relative times. Missing device-parameter lanes can be
+materialized on MIDI or audio Arrangement clips; audio clips require an exposed
+source `file_path` so the bridge can stage a temporary Session audio clip before
+duplicating it back to Arrangement.
 
 ```sh
 abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","duration":16,"from_normalized":0.2,"to_normalized":0.95,"curve":"ease-in-out","clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
