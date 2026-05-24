@@ -280,6 +280,7 @@ abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out --clear
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --events '[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":16,"normalized":0.95}]' --clear
 abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","duration":16,"from_normalized":0.2,"to_normalized":0.95,"curve":"ease-in-out","clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
+abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","events":[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":8,"normalized":0.45,"curve_coefficients":{"x1":0.55,"y1":0,"x2":1,"y2":1}},{"time":16,"normalized":0.95}],"clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
 abletonctl arrangement-automation-file-set --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --clip-name "Noise Rise" --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out
 abletonctl arrangement-automation-file-get --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency
 abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --times 0,4,8,12,15.5
@@ -291,11 +292,12 @@ abletonctl clip-stock-automation-get --track "Codex MIDI" --slot 0 --device Pitc
 
 Automation steps and breakpoint events accept raw `value` or normalized `0..1` values.
 Breakpoint events may include `curve_coefficients` with `x1`, `y1`, `x2`, and `y2`.
-When those curve handles must be committed exactly as Ableton `CurveControl*` saved-set
-fields, use `arrangement-automation-file-set` on a saved `.als` while the set is not open
-in Live, then reopen it. Use `arrangement-automation-file-get` to inspect saved breakpoint
-events and curve coefficients. Nested rack devices can be automated with `--device-path`,
-or with `--device-track` plus a top-level device name.
+Runtime `--curve` and event-level coefficients create true Ableton breakpoint curves in
+the open set; no close/reopen cycle is required. Convert absolute bar requests to
+clip-relative event times. Use `arrangement-automation-file-get` to inspect saved
+breakpoint events and curve coefficients, and `arrangement-automation-file-set` only for
+offline repair. Nested rack devices can be automated with `--device-path`, or with
+`--device-track` plus a top-level device name.
 `arrangement-automation-set` writes Arrangement clip lanes through the bridge's dedicated
 Arrangement automation path. On MIDI Arrangement clips, the bridge can create a missing
 lane by staging a temporary Session clip, duplicating it back to Arrangement, and cleaning

@@ -22,10 +22,11 @@ class ArrangementAutomationCurveCommandTests(unittest.TestCase):
     def test_arrangement_automation_set_writes_curved_events(self):
         deleted_ranges = []
         created_events = []
+        create_calls = []
         envelope = SimpleNamespace(
             parameter=None,
             delete_events_in_range=lambda start, end: deleted_ranges.append((start, end)),
-            create_event=_create_or_replace(created_events),
+            create_event=_create_or_replace(created_events, create_calls),
             value_at_time=lambda time: 0.6,
             events_in_range=lambda start, end: created_events,
         )
@@ -63,6 +64,7 @@ class ArrangementAutomationCurveCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(deleted_ranges, [(0.0, 1576800.0)])
+        self.assertEqual(create_calls, [(8.0, 0.9), (0.0, 0.2)])
         self.assertEqual([(event.time, event.value) for event in created_events], [(0.0, 0.2), (8.0, 0.9)])
         self.assertEqual(created_events[0].control_coefficients.x1, 0.42)
         self.assertEqual(result["write_mode"], "events")
@@ -97,9 +99,10 @@ class ArrangementAutomationCurveCommandTests(unittest.TestCase):
         )
         source_clip.canonical_parent = track
         created_events = []
+        create_calls = []
         temp_envelope = SimpleNamespace(
             parameter=parameter,
-            create_event=_create_or_replace(created_events),
+            create_event=_create_or_replace(created_events, create_calls),
             value_at_time=lambda time: 0.7,
             events_in_range=lambda start, end: created_events,
         )
@@ -131,6 +134,7 @@ class ArrangementAutomationCurveCommandTests(unittest.TestCase):
         self.assertEqual(undo_calls, ["begin", "end"])
         self.assertTrue(source_clip.deleted)
         self.assertEqual(duplicates, [(temp_clip, 48.0)])
+        self.assertEqual(create_calls, [(8.0, 0.9), (0.0, 0.2)])
         self.assertEqual([(event.time, event.value) for event in created_events], [(0.0, 0.2), (8.0, 0.9)])
         self.assertFalse(slot.has_clip)
         self.assertTrue(result["materialized_from_session_clip"])
@@ -155,15 +159,20 @@ def _fake_envelope_module():
     return SimpleNamespace(EnvelopeEvent=Event, EnvelopeEventControlCoefficients=Coefficients)
 
 
-def _create_or_replace(events):
+def _create_or_replace(events, calls=None):
     def create(event):
+        if calls is not None:
+            calls.append((event.time, event.value))
         stored = SimpleNamespace(time=event.time, value=event.value, control_coefficients=None)
+        if event.control_coefficients is not None and any(existing.time > event.time for existing in events):
+            stored.control_coefficients = event.control_coefficients
         for index, existing in enumerate(events):
             if existing.time == event.time:
-                stored.control_coefficients = event.control_coefficients
                 events[index] = stored
+                events.sort(key=lambda item: item.time)
                 return
         events.append(stored)
+        events.sort(key=lambda item: item.time)
     return create
 
 

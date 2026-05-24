@@ -77,25 +77,6 @@ class AutomationHelperMixin(object):
         if coefficients is not None:
             event.control_coefficients = module.EnvelopeEventControlCoefficients(**coefficients)
         method(event)
-        if coefficients is not None:
-            self._set_stored_automation_event_coefficients(envelope, time_value, value, coefficients)
-
-    def _set_stored_automation_event_coefficients(self, envelope, time_value, value, coefficients):
-        events_in_range = getattr(envelope, "events_in_range", None)
-        if not callable(events_in_range):
-            return
-        events = list(events_in_range(float(time_value) - 0.0001, float(time_value) + 0.0001))
-        if not events:
-            return
-        event = min(events, key=lambda item: abs(float(self._safe_get(item, "time", time_value)) - float(time_value)))
-        try:
-            event.value = float(value)
-        except Exception:
-            pass
-        event.control_coefficients = self._live_envelope_module().EnvelopeEventControlCoefficients(**coefficients)
-        create_event = getattr(envelope, "create_event", None)
-        if callable(create_event):
-            create_event(event)
 
     def _automation_value_at_time(self, envelope, time_value):
         method = getattr(envelope, "value_at_time", None)
@@ -142,16 +123,17 @@ class AutomationHelperMixin(object):
         return inserted
 
     def _insert_automation_events(self, envelope, parameter, events):
-        inserted = []
+        pending = []
         for event, time_value in events:
             value = self._automation_step_value(parameter, event)
             coefficients = self._automation_event_coefficients(event)
-            self._insert_automation_event(envelope, time_value, value, coefficients)
             item = {"time": time_value, "value": value}
             if coefficients is not None:
                 item["control_coefficients"] = coefficients
-            inserted.append(item)
-        return inserted
+            pending.append((event, time_value, value, coefficients, item))
+        for _event, time_value, value, coefficients, _item in sorted(pending, key=lambda entry: entry[1], reverse=True):
+            self._insert_automation_event(envelope, time_value, value, coefficients)
+        return [item for _event, _time, _value, _coefficients, item in pending]
 
     def _automation_event_coefficients(self, event):
         coefficients = event.get("curve_coefficients")

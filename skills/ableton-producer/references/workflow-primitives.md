@@ -188,19 +188,24 @@ abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 48
 abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Resonance --times 0,4,8,12,15.5
 ```
 
-For Arrangement transitions that need true Ableton curves, patch the saved set with
-`arrangement-automation-file-set` while Live is closed, then reopen and verify with
-sampled `arrangement-automation-get` values:
+For Arrangement transitions that need true Ableton curves, write runtime breakpoint
+events while Live is open and verify sampled `arrangement-automation-get` values:
 
 ```sh
-abletonctl arrangement-automation-file-set --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --clip-name "Noise Rise" --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out
-abletonctl arrangement-automation-file-get --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency
+abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out --clear
 abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --times 0,4,8,12,16
 ```
 
-Use runtime `arrangement-automation-set --curve` or event-level `curve_coefficients`
-as a breakpoint payload builder, but saved-set curve verification is the authority because
-Live's runtime API can normalize hidden Arrangement curve coefficients.
+For multi-breakpoint shapes, use event-level `curve_coefficients`. Absolute bar requests
+must be converted to clip-relative time: bar 17 on a clip starting at 8 is event time 9.
+
+```sh
+abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 8 --device "Auto Filter" --lanes '[{"param":"Frequency","events":[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":9,"normalized":0.45,"curve_coefficients":{"x1":0.55,"y1":0,"x2":1,"y2":1}},{"time":24,"normalized":0.9}],"clear":true},{"param":"Resonance","duration":24,"from_normalized":0.1,"to_normalized":0.35,"steps":8,"clear":true}]'
+abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 8 --device "Auto Filter" --param Frequency --times 0,3,6,9,12,15,18,21,24
+```
+
+Use `arrangement-automation-file-get` to audit saved `.als` curve fields, and
+`arrangement-automation-file-set` only for offline repair when Live is not running.
 
 ## Drum Rack And Sampler Work
 

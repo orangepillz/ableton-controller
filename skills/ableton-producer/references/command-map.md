@@ -156,15 +156,16 @@ Use `midi-replace-notes` only after approval unless the clip was just created fo
 ## Automation
 
 Automation steps and breakpoint events use clip time. Use `value` for raw parameter values
-and `normalized` for 0..1 movement. Runtime `--curve`/event payloads create breakpoint
-events. For guaranteed Ableton curve handles, use the saved-set commands; they write and
-read the actual `.als` `CurveControl*` fields.
+and `normalized` for 0..1 movement. Runtime `--curve` and event-level
+`curve_coefficients` create true Ableton breakpoint curves in the open set; no close/reopen
+cycle is required. Use saved-set commands only for offline inspection or repair.
 
 ```sh
 abletonctl clip-stock-automation-set --track "Bass" --slot 0 --device "Auto Filter" --stock-device "Auto Filter" --control frequency --clear --steps '[{"time":0,"duration":1,"normalized":0.18},{"time":1,"duration":1,"normalized":0.72}]'
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --steps 8 --clear
 abletonctl arrangement-automation-set --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --events '[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":16,"normalized":0.95}]' --clear
 abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","duration":16,"from_normalized":0.2,"to_normalized":0.95,"curve":"ease-in-out","clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
+abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","events":[{"time":0,"normalized":0.2,"curve_coefficients":{"x1":0.42,"y1":0,"x2":0.58,"y2":1}},{"time":8,"normalized":0.45,"curve_coefficients":{"x1":0.55,"y1":0,"x2":1,"y2":1}},{"time":16,"normalized":0.95}],"clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
 abletonctl arrangement-automation-file-set --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --clip-name "Noise Rise" --device "Auto Filter" --param Frequency --duration 16 --from-normalized 0.2 --to-normalized 0.95 --curve ease-in-out
 abletonctl arrangement-automation-file-get --set-file "/path/to/project.als" --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency
 abletonctl arrangement-automation-get --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --param Frequency --times 0,4,8,12,15.5
@@ -175,7 +176,8 @@ abletonctl clip-stock-automation-clear --track "Bass" --slot 0 --device "Auto Fi
 Clip automation is preferred for repeatable bass movement, filter sweeps, fakeouts, fills, and transitions.
 Use `arrangement-automation-set` when the request describes a buildup, drop, fakeout, or transition over an Arrangement range and a clip already exists at `--arrangement-start`.
 Use `arrangement-automation-set-many` for coupled lanes on the same MIDI Arrangement clip, especially cutoff plus resonance, because missing or hidden Arrangement lanes can be materialized together without discarding the first lane.
-Use `arrangement-automation-file-set` for true parametric curve writes; close Live first or avoid saving the open in-memory set over the patched file.
+For a request like "add a curve at bar 17" on a clip starting at beat 8, convert to clip-relative time `9` in the event JSON.
+Use `arrangement-automation-file-set` only for offline saved-set repair; do normal curve creation and editing through runtime Arrangement commands while Live is open.
 Use `arrangement-automation-get` after every Arrangement automation write. Times are clip-relative: if a clip starts at Arrangement beat 48, `--times 0,8,15.5` samples beats 48, 56, and 63.5.
 Run multiple sampled Arrangement automation reads sequentially, not in parallel, because hidden Arrangement lanes are read by briefly moving and restoring Live's playhead.
 
