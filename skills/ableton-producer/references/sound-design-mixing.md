@@ -1,5 +1,11 @@
 # Sound Design And Mixing Heuristics
 
+For named sound categories, load `sound-library/index.md` and the relevant
+family file before designing commands. This file stays high-level; the library
+contains concrete recipes for wubs, squelches, glitches, zaps, breaks, fills,
+ghost hats, spectral FX, tech house bass, experimental bass details, and related
+loop/kit vocabulary.
+
 ## Producer Phrase Translation
 
 - "Make this drop hit harder": increase pre-drop contrast, tighten kick/sub timing, strengthen drum transient, add controlled bass harmonics, avoid master-only gain.

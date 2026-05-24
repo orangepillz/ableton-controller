@@ -87,6 +87,21 @@ Explain reasoning briefly when the operation has aesthetic consequences:
 
 Do not over-explain routine commands. The user asked to create music, not read a manual.
 
+## Sound Library Lookup
+
+When the user asks for a specific sound, loop, kit, break, transition, or
+artist-adjacent vocabulary such as wubs, squelches, reeses, growls, zaps,
+glitches, Amen-style chops, tech house bass, alien bass, Tipper-style detail, G
+Jones-style FM/break edits, Detox Unit-style sparse glitch bass, Shlump-style
+alien dubstep, or Chris Lake-style kick/bass groove, load
+`references/sound-library/index.md` first. Then load only the relevant family
+file from `references/sound-library/` and use its recipes as original,
+non-imitative Ableton CLI starting points.
+
+Treat the library as production vocabulary, not a clone recipe. Prefer the
+user's current set evidence, genre, key, and arrangement context over literal
+artist imitation.
+
 ## Reference Guide
 
 Load only the references needed for the current request:
@@ -96,6 +111,12 @@ Load only the references needed for the current request:
 - `references/command-map.md`: exact CLI command families, target references, stock controls, LOM fallback.
 - `references/workflow-primitives.md`: reusable command patterns for tracks, MIDI, devices, automation, routing, resampling, cleanup.
 - `references/sound-design-mixing.md`: bass music sound design recipes, mix/master heuristics, arrangement moves.
+- `references/sound-library/index.md`: lookup entrypoint for named sound, loop, kit, break, FX, and groove recipes; load before opening a family file.
+- `references/sound-library/research-notes.md`: research synthesis for Tipper, G Jones, Shlump, Detox Unit, Chris Lake, and related genre palettes.
+- `references/sound-library/bass-synths.md`: wubs, squelches, reeses, growls, FM screeches, yois, sub drops, neuro bass, psybass, percussive bass hits.
+- `references/sound-library/fx-textures.md`: glitches, zaps, risers, fallers, granular textures, foley, pads, soundscapes, reverse FX, impacts, vocal chops, stereo ear candy, spectral FX, delay throws.
+- `references/sound-library/drums-breaks.md`: breakbeats, Amen-style chops, halftime drums, glitch drums, fills, hats, foley percussion, kicks, snares, neuro percussion, reverse cymbals, jungle rolls.
+- `references/sound-library/groove-structures.md`: swing, ghost notes, microtiming, syncopation, polyrhythms, tuplets, call/response, fake drops, retriggers, ratchets, broken beat, IDM, boom-bap, trip-hop, pocket, elastic timing.
 - `references/genre-guides.md`: dubstep, tech house, experimental bass, glitch hop, future bass, DnB, breakbeat conventions.
 - `references/research-synthesis.md`: non-imitative synthesis from producer research including Tipper, G Jones, Chris Lake, bass movement, groove, and arrangement flow.
 - `references/examples.md`: prompt-to-plan examples for complex natural language production requests.
