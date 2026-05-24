@@ -85,7 +85,7 @@ Humanized drums:
 
 "Layer a wide supersaw under this lead" means:
 
-1. Duplicate or create a MIDI/instrument track.
+1. Duplicate or create a MIDI/instrument track inside `Synths`.
 2. Use an instrument suited to saw stacks or load a relevant preset.
 3. Keep it lower in level than the lead.
 4. High-pass enough to avoid fighting sub and bass.

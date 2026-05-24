@@ -1,6 +1,8 @@
 # Examples
 
-Each example shows intent translation, not a fixed recipe. Probe first and adjust names, bars, and devices to the current set.
+Each example shows intent translation, not a fixed recipe. Probe first and
+adjust names, bars, devices, target template groups, and `create-track --index`
+values to the current set.
 
 ## "Make This Drop Hit Harder"
 
@@ -40,7 +42,8 @@ Intent: automate spectral, rhythmic, and spatial lift over the pre-drop range.
 Assumptions: buildup is beat 48 to 64, drop starts at 64.
 
 ```sh
-abletonctl create-track --type audio --name "FX Riser"
+abletonctl create-track --type audio --index 33 --name "FX Riser"
+abletonctl lom-get 'song.tracks[33].group_track.name'
 abletonctl device-add-stock --target-track "Build Bus" --path "audio_effects/Auto Filter"
 abletonctl stock-controls --device "Auto Filter" --control frequency
 abletonctl arrangement-automation-set-many --track "Build Bus" --arrangement-start 48 --device "Auto Filter" --lanes '[{"param":"Frequency","duration":16,"from_normalized":0.2,"to_normalized":0.95,"curve":"ease-in-out","clear":true},{"param":"Resonance","duration":16,"from_normalized":0.12,"to_normalized":0.35,"steps":8,"clear":true}]'
@@ -56,7 +59,8 @@ If no `Build Bus` clip exists at that arrangement start, create a new automation
 Intent: create a support layer that widens the lead without masking sub or vocal.
 
 ```sh
-abletonctl create-track --type midi --name "Lead Wide Support"
+abletonctl create-track --type midi --index 29 --name "Lead Wide Support"
+abletonctl lom-get 'song.tracks[29].group_track.name'
 abletonctl device-add-stock --target-track "Lead Wide Support" --path "instruments/Instrument Rack"
 abletonctl device-add-stock --target-track "Lead Wide Support" --path "audio_effects/EQ Eight"
 abletonctl device-add-stock --target-track "Lead Wide Support" --path "audio_effects/Chorus-Ensemble"
@@ -161,7 +165,8 @@ For swing, read note IDs and update only offbeat hats.
 Intent: generate a playable phrase with space and contrast.
 
 ```sh
-abletonctl create-track --type midi --name "Call Response Bass"
+abletonctl create-track --type midi --index 29 --name "Call Response Bass"
+abletonctl lom-get 'song.tracks[29].group_track.name'
 abletonctl device-add-stock --target-track "Call Response Bass" --path "instruments/Operator"
 abletonctl device-add-stock --target-track "Call Response Bass" --path "audio_effects/Auto Filter"
 abletonctl clip-create-midi --track "Call Response Bass" --slot 0 --length 8 --name "Call Response Bass 01"

@@ -6,8 +6,10 @@ Maintain this state mentally across an operation and refresh it after edits:
 
 - Transport: tempo, time signature, playing/stopped state, selected track.
 - Structure: track names, indices, kinds, returns, master, scenes, relevant clip slots.
+- Template hierarchy: top-level groups, nested drum groups, each target track's `is_grouped` and `group_track.name` when creating or moving material.
 - Musical metadata: requested or inferred key, scale, genre, section labels, bar range.
 - Track roles: kick, snare/clap, hats, percussion, sub, mid bass, lead, pad, vocal, FX, buses, returns, master.
+- Sidechain state: `SC In` LFO Tool, `SC Trigger` MIDI trigger, and source-group output routing into `SC In`.
 - Device state: top-level devices, rack paths from `device-tree`, stock control names, current parameter values.
 - Clip refs: session `--track` plus `--slot`, arrangement `--track` plus `--arrangement-start` or `--arrangement-index`, or a LOM `--path`.
 - Pending risk: destructive commands, bulk scope, UI automation, uncertain targets, user approval.
@@ -38,6 +40,7 @@ abletonctl clips --track "Bass"
 abletonctl midi-get-notes --track "Bass" --slot 0 --start 0 --end 4
 abletonctl stock-controls --device "Auto Filter"
 abletonctl params --track "Bass" --device "Auto Filter"
+abletonctl devices --track "SC In"
 ```
 
 ## Targeting Rules
@@ -45,6 +48,11 @@ abletonctl params --track "Bass" --device "Auto Filter"
 - Prefer exact names for newly created tracks and clips.
 - Prefer indices only after reading `tracks`, `clips`, or `device-tree`.
 - If a name is ambiguous, stop and resolve it with indices instead of guessing.
+- Before adding or duplicating a regular track, choose one of the template top-level groups: `SC`, `Drums`, `Sub`, `Synths`, `Vox`, or `FX`.
+- Use `SC` only for sidechain infrastructure. Normal musical material belongs in `Drums`, `Sub`, `Synths`, `Vox`, or `FX`.
+- Reuse existing tracks or starter tracks inside those groups before creating a new track.
+- If creating a track, use `create-track --index` to place it inside the selected group and verify the result with `lom-get 'song.tracks[N].group_track.name'`.
+- Ask before creating a top-level track, a new top-level group, a broad bus/return structure, or any track outside the template groups.
 - For nested rack devices, use `device-tree` paths and then `--device-path`.
 - For arrangement edits, be explicit about bars/beats. At 4/4, bar 17 starts at beat 64.
 
@@ -90,12 +98,15 @@ python3 skills/ableton-producer/scripts/ableton_plan.py plan.json --execute --al
 ## Risk Classes
 
 Small reversible changes:
-- Add a track, create a new clip, add a device, set a single parameter, set tempo, create a scene, add notes to an empty new clip.
+- Add a track inside an approved template group, create a new clip, add a device, set a single parameter, set tempo, create a scene, add notes to an empty new clip.
 
 Plan first:
-- Multi-track routing, bus setup, sidechain setup, bulk send changes, arrangement section edits, long MIDI rewrites, rack construction, resampling preparation.
+- Creating a new subgroup inside a template group, multi-track routing, bus setup, sidechain setup, bulk send changes, arrangement section edits, long MIDI rewrites, rack construction, resampling preparation.
 
 Require approval:
+- New top-level regular tracks or groups outside `SC`, `Drums`, `Sub`, `Synths`, `Vox`, or `FX`.
+- New return tracks or global mix buses.
+- Changes to `SC In`, `SC Trigger`, LFO Tool, sidechain trigger MIDI, or group output routing into/out of `SC In`.
 - `delete-track`, `delete-scene`, `device-delete`, `clip-delete`.
 - `midi-clear-notes`, `midi-replace-notes`, broad `midi-remove-notes`.
 - `clip-automation-clear`, `clip-stock-automation-clear`.

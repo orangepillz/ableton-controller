@@ -29,8 +29,8 @@ from historical projects.
 ## Tracks, Scenes, And Routing
 
 ```sh
-abletonctl create-track --type midi --name "Drop Bass"
-abletonctl create-track --type audio --name "Resample Print"
+abletonctl create-track --type midi --index 29 --name "Lead Wide Support"
+abletonctl create-track --type audio --index 33 --name "FX Riser"
 abletonctl create-track --type return --name "Short Verb"
 abletonctl duplicate-track --track "Lead"
 abletonctl delete-track --track "Scratch"
@@ -42,11 +42,22 @@ abletonctl set-routing --track "Resample Print" --direction input --type "Resamp
 abletonctl set-routing --track "Bass" --direction output --type "Bass Bus"
 ```
 
+Use `create-track --index` for regular tracks so the new track lands inside the
+resolved template group. The example indices above are from the starting
+template order and insert before an existing child of `Synths` or `FX`;
+recompute them from `tracks` plus `group_track.name` before execution. Ask
+before creating top-level tracks, top-level groups, or return tracks.
+
 Use `set-routing` after reading available route names from a failed attempt or Live state. Routing names are matched by displayed name.
+For sidechain routing, first inspect `SC In` and the source group's current
+output route. The template uses `SC In` as the ducked audio path with LFO Tool,
+driven by `SC Trigger`; do not alter that route without approval.
 Use `locators` before `set-locator`; renaming locators changes the Live set, so
 prefer a rendered plan for multi-locator edits.
 
-For grouping, first try a LOM-backed plan:
+For grouping, first try a LOM-backed plan, and only create subgroups inside the
+appropriate template top-level group unless the user approves a new top-level
+group:
 
 ```sh
 abletonctl lom-inspect song

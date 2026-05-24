@@ -18,8 +18,10 @@ abletonctl workflow-macro render mix-bus-control --track Master --memory .ableto
 ```
 
 Treat workflow macros as starting points. Inspect the rendered commands, adjust
-track names and ranges to the current set, then run the plan renderer before
-execution.
+track names, insertion indices, target groups, and ranges to the current set,
+then run the plan renderer before execution. Any rendered `create-track` command
+must be rewritten with an index inside the intended template group before it is
+executed.
 
 Before selecting a macro for a broad natural-language request, query the
 personalized intent memory:
@@ -75,7 +77,7 @@ abletonctl workflow-macro render arrangement-marker-naming --memory .ableton-cop
 
 ## New Musical Part
 
-1. Create or identify the target track.
+1. Identify the target template group and existing/starter track.
 2. Add an instrument or rack.
 3. Create a clip at the target slot or arrangement start.
 4. Add notes with a musically intentional rhythm and range.
@@ -85,13 +87,18 @@ abletonctl workflow-macro render arrangement-marker-naming --memory .ableton-cop
 Example:
 
 ```sh
-abletonctl create-track --type midi --name "Call Bass"
+abletonctl create-track --type midi --index 29 --name "Call Bass"
+abletonctl lom-get 'song.tracks[29].group_track.name'
 abletonctl device-add-stock --target-track "Call Bass" --path "instruments/Operator"
 abletonctl device-add-stock --target-track "Call Bass" --path "audio_effects/Auto Filter"
 abletonctl clip-create-midi --track "Call Bass" --slot 0 --length 4 --name "Call Bass 01"
 abletonctl midi-add-notes --track "Call Bass" --slot 0 --notes '[{"pitch":36,"start_time":0,"duration":0.5,"velocity":115},{"pitch":36,"start_time":1.5,"duration":0.25,"velocity":102}]'
 abletonctl midi-get-notes --track "Call Bass" --slot 0
 ```
+
+Recompute the `--index` from the current `tracks` output before execution. For
+this example, `Call Bass` belongs in `Synths` unless the request asks for pure
+sub, in which case use `Sub`.
 
 ## Call And Response Bass Pattern
 
@@ -211,14 +218,15 @@ Use `arrangement-automation-file-get` to audit saved `.als` curve fields, and
 
 Use wrapped commands for the deterministic parts and browser/LOM only when needed:
 
-1. Create or locate a MIDI track.
+1. Create or locate a MIDI track inside the target template group.
 2. Add `Drum Rack`, `Simpler`, `Sampler`, or a preset from the browser.
 3. Use `device-tree` to identify rack chains and nested devices.
 4. Load exact pads with `drum-pad-load` when a browser path is known.
 5. Program the MIDI pattern with exact note objects.
 
 ```sh
-abletonctl create-track --type midi --name "Drop Drum Rack"
+abletonctl create-track --type midi --index 4 --name "Drop Drum Rack"
+abletonctl lom-get 'song.tracks[4].group_track.name'
 abletonctl device-add-stock --target-track "Drop Drum Rack" --path "instruments/Drum Rack"
 abletonctl browser-search "Kick" --item samples --depth 5 --max-results 12
 abletonctl drum-pad-load --track "Drop Drum Rack" --pad C1 --item "samples/Kick.wav"
@@ -227,6 +235,9 @@ abletonctl device-tree --track "Drop Drum Rack" --depth 5
 abletonctl clip-create-midi --track "Drop Drum Rack" --slot 0 --length 4 --name "Drop Drums 01"
 abletonctl midi-add-notes --track "Drop Drum Rack" --slot 0 --notes '[{"pitch":36,"start_time":0,"duration":0.25,"velocity":118},{"pitch":38,"start_time":2,"duration":0.25,"velocity":120},{"pitch":42,"start_time":0.5,"duration":0.125,"velocity":82}]'
 ```
+
+Recompute the drum insertion index before execution and verify that the new rack
+is grouped under `Drums` or the intended drum subgroup.
 
 Use `--clear` only after approval when a pad already contains chains. Without it,
 the command protects existing pad chains and reports the conflict.
@@ -292,12 +303,14 @@ Any delete or clear step requires approval unless editing a newly created scratc
 The CLI can set up resampling tracks and routing, but recording and export may need UI/menu automation.
 
 ```sh
-abletonctl create-track --type audio --name "Resample Print"
+abletonctl create-track --type audio --index 33 --name "Resample Print"
+abletonctl lom-get 'song.tracks[33].group_track.name'
 abletonctl set-routing --track "Resample Print" --direction input --type "Resampling"
 abletonctl set-track --track "Resample Print" --arm true
 ```
 
-Plan before recording. Confirm bar range, source buses, whether to freeze current devices, and whether saving/exporting is allowed.
+Plan before recording. Confirm bar range, source buses, target template group,
+whether to freeze current devices, and whether saving/exporting is allowed.
 
 For a bass sound-design print pass, render the reusable macro:
 
@@ -310,7 +323,7 @@ abletonctl workflow-macro render bass-resampling-pass --track "Mid Bass" --start
 Use after creative edits:
 
 - Name tracks by role: `DRM Kick`, `DRM Snare`, `SUB`, `BASS Mid`, `MUS Lead`, `FX Riser`.
-- Place buses near source tracks.
+- Place tracks and buses inside their correct template groups, not at top level.
 - Mute unused scratch material instead of deleting unless approved.
 - Set return names by function: `A Short Verb`, `B Dub Delay`, `C Parallel Crush`.
 - Turn off accidental solos/arms.
