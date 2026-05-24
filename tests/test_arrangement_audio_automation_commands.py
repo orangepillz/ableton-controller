@@ -144,6 +144,77 @@ class ArrangementAudioAutomationCommandTests(unittest.TestCase):
         self.assertEqual(target.end_marker, 5.0)
         self.assertEqual(bridge.replaced_markers, [(1.0, 0.5), (5.0, 2.5)])
 
+    def test_copy_audio_clip_contents_skips_out_of_range_warp_markers(self):
+        source = SimpleNamespace(
+            name="Riser",
+            color=123,
+            color_index=7,
+            muted=False,
+            looping=True,
+            signature_numerator=4,
+            signature_denominator=4,
+            is_audio_clip=True,
+            length=32.0,
+            warping=True,
+            warp_mode=2,
+            gain=0.4,
+            pitch_coarse=0,
+            pitch_fine=0.0,
+            ram_mode=False,
+            start_marker=0.0,
+            end_marker=32.0,
+            loop_start=0.0,
+            loop_end=32.0,
+            markers=[
+                {"beat_time": 0.0, "sample_time": 0.0},
+                {"beat_time": 32.0, "sample_time": 13.713990929705215},
+                {"beat_time": 32.03125, "sample_time": 13.727383498972506},
+            ],
+        )
+        target = SimpleNamespace(sample_duration=13.713990929705215)
+        bridge = _ClipRefBridge()
+
+        bridge._copy_audio_clip_contents(source, target)
+
+        self.assertEqual(
+            bridge.replaced_markers,
+            [(0.0, 0.0), (32.0, 13.713990929705215)],
+        )
+
+    def test_copy_audio_clip_contents_skips_live_rejected_out_of_range_warp_markers(self):
+        source = SimpleNamespace(
+            name="Riser",
+            color=123,
+            color_index=7,
+            muted=False,
+            looping=True,
+            signature_numerator=4,
+            signature_denominator=4,
+            is_audio_clip=True,
+            length=32.0,
+            warping=True,
+            warp_mode=2,
+            gain=0.4,
+            pitch_coarse=0,
+            pitch_fine=0.0,
+            ram_mode=False,
+            start_marker=0.0,
+            end_marker=32.0,
+            loop_start=0.0,
+            loop_end=32.0,
+            markers=[
+                {"beat_time": 0.0, "sample_time": 0.0},
+                {"beat_time": 32.0, "sample_time": 13.713990929705215},
+            ],
+        )
+        target = SimpleNamespace(sample_duration=13.713990929705215)
+        bridge = _ClipRefBridge()
+        bridge.rejected_markers.add((32.0, 13.713990929705215))
+
+        bridge._copy_audio_clip_contents(source, target)
+
+        self.assertEqual(bridge.replaced_markers, [(0.0, 0.0)])
+
 
 class _Bridge(AutomationHelperMixin, ClipAutomationCommandMixin, AutomationCommandMixin):
     def __init__(self, song, application=None):
@@ -173,6 +244,7 @@ class _Bridge(AutomationHelperMixin, ClipAutomationCommandMixin, AutomationComma
 class _ClipRefBridge(ClipReferenceMixin):
     def __init__(self):
         self.replaced_markers = []
+        self.rejected_markers = set()
 
     def _safe_get(self, obj, attr, default=None):
         return getattr(obj, attr, default)
@@ -203,6 +275,8 @@ class _ClipRefBridge(ClipReferenceMixin):
         return clip.markers
 
     def _replace_audio_warp_marker(self, clip, beat_time, sample_time):
+        if (float(beat_time), sample_time) in self.rejected_markers:
+            raise ValueError("Could not add warp marker: Warp marker sample time is out of range.")
         self.replaced_markers.append((float(beat_time), sample_time))
 
 

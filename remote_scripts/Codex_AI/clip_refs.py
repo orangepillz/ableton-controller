@@ -244,7 +244,31 @@ class ClipReferenceMixin(object):
             beat_time = marker.get("beat_time")
             if beat_time is None:
                 continue
-            self._replace_audio_warp_marker(target, beat_time, marker.get("sample_time"))
+            sample_time = marker.get("sample_time")
+            if not self._audio_warp_marker_in_range(target, sample_time):
+                continue
+            try:
+                self._replace_audio_warp_marker(target, beat_time, sample_time)
+            except ValueError as error:
+                if "sample time is out of range" not in str(error):
+                    raise
+
+    def _audio_warp_marker_in_range(self, clip, sample_time):
+        if sample_time is None:
+            return True
+        try:
+            sample_value = float(sample_time)
+        except Exception:
+            return True
+        if sample_value < 0.0:
+            return False
+        sample_duration = self._safe_get(clip, "sample_duration")
+        if sample_duration is None:
+            return True
+        try:
+            return sample_value <= float(sample_duration) + 0.000001
+        except Exception:
+            return True
 
     def _replace_audio_warp_marker(self, clip, beat_time, sample_time):
         existing = self._find_warp_marker(clip, beat_time)
