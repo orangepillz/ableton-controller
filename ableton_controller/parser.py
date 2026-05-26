@@ -11,6 +11,7 @@ from .parser_devices import add_device_commands
 from .parser_local import add_local_commands
 from .parser_mixer_transport import add_mixer_transport_commands
 from .parser_midi import add_midi_commands
+from .parser_serum import add_serum_commands
 from .parser_stock import add_stock_commands
 from .parser_tracks import add_track_scene_commands
 
@@ -22,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_core_commands(sub)
     add_device_commands(sub)
+    add_serum_commands(sub)
     add_stock_commands(sub)
     add_mixer_transport_commands(sub)
     add_local_commands(sub)

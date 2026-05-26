@@ -49,8 +49,10 @@ def verification_steps(
             _add(steps, "verify-clip-automation", "clip-stock-automation-get", "Sample written clip automation after movement edits.")
         if "arrangement-automation-set" in normalized:
             _add(steps, "verify-arrangement-automation", "session-snapshot", "Refresh the affected arrangement track after automation edits.")
-        if "device-add-stock" in normalized or "personalized-space-chain" in normalized or "drum-punch-bus" in normalized or "mix-bus-control" in normalized or "riser-transition" in normalized:
+        if "device-add-stock" in normalized or "serum-add" in normalized or "personalized-space-chain" in normalized or "drum-punch-bus" in normalized or "mix-bus-control" in normalized or "riser-transition" in normalized:
             _add(steps, "verify-device-chain", "device-tree", "Read the affected track device chain after adding devices.")
+        if "serum-set" in normalized:
+            _add(steps, "verify-serum-params", "serum-params", "Read exposed Serum parameters before or after Serum control changes.")
         if "stock-controls" in normalized or "set-stock-control" in normalized:
             _add(steps, "verify-stock-controls", "stock-controls", "Read stock-device controls before or after parameter tuning.")
         if "set-routing" in normalized or "bass-resampling-pass" in normalized or "set-track" in normalized:

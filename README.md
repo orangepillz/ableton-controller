@@ -163,6 +163,20 @@ abletonctl set-param --track "Synth" --device "EQ Eight" --param "1 Frequency A"
 abletonctl set-param --device-path "song.tracks[30].devices[0].chains[0].devices[0]" --param Threshold --normalized 0.35
 ```
 
+Add and control Xfer Serum from Live's Plugins browser:
+
+```sh
+abletonctl serum-add --target-track "Lead" --format vst3
+abletonctl serum-params --track "Lead"
+abletonctl serum-set --track "Lead" --param "Filter Cutoff" --normalized 0.45
+abletonctl serum-set-many --track "Lead" --controls '[{"param":"Filter Cutoff","normalized":0.45},{"param":"WT Pos","delta":0.05}]'
+```
+
+Use `--instance`, `--device`, or `--device-path` when a track has multiple
+Serum devices. `serum-add` defaults to VST-family plug-ins and accepts
+`--format any` or an exact `--path` if your Live browser exposes Serum
+somewhere else.
+
 The repository also includes a generated Live 12 stock-device controls registry
 at `data/stock_device_controls.live12.json`. It is generated from Live's own
 browser and loaded-device parameter lists, so each Built-in instrument, audio

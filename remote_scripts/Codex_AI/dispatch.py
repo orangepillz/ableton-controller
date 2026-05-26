@@ -27,6 +27,14 @@ class CommandDispatcherMixin(object):
             return self._device_tree(payload)
         if command == "device_add_stock":
             return self._device_add_stock(payload)
+        if command == "serum_add":
+            return self._serum_add(payload)
+        if command == "serum_params":
+            return self._serum_params(payload)
+        if command == "serum_set_param":
+            return self._serum_set_param(payload)
+        if command == "serum_set_many":
+            return self._serum_set_many(payload)
         if command == "device_move":
             return self._device_move(payload)
         if command == "device_delete":

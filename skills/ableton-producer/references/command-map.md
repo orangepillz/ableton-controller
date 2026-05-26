@@ -97,6 +97,19 @@ abletonctl device-add-stock --target-path "song.tracks[3].devices[0].chains[0]" 
 abletonctl set-param --device-path "song.tracks[3].devices[0].chains[0].devices[0]" --param Threshold --normalized 0.35
 ```
 
+Serum plug-in commands:
+
+```sh
+abletonctl serum-add --target-track "Lead" --format vst3
+abletonctl serum-params --track "Lead"
+abletonctl serum-set --track "Lead" --param "Filter Cutoff" --normalized 0.45
+abletonctl serum-set-many --track "Lead" --controls '[{"param":"Filter Cutoff","normalized":0.45},{"param":"WT Pos","delta":0.05}]'
+```
+
+Use `--instance`, `--device`, or `--device-path` when multiple Serum devices are
+on the same track. Always inspect `serum-params` first if the exact exposed
+parameter name is unknown.
+
 For Drum Rack kit building, use `drum-pad-load` after `browser-search` identifies
 a loadable sample, instrument, or preset path. It targets the requested pad note
 and refuses to overwrite existing pad chains unless `--clear` is present.

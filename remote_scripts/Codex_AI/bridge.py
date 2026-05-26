@@ -23,6 +23,7 @@ try:
     from .midi_commands import MidiCommandMixin
     from .midi_helpers import MidiHelperMixin
     from .resolvers import ResolverMixin
+    from .serum_commands import SerumCommandMixin
     from .serialization import SerializationMixin
     from .track_commands import TrackCommandMixin
     from .utilities import UtilityMixin
@@ -44,6 +45,7 @@ except ImportError:
     from midi_commands import MidiCommandMixin
     from midi_helpers import MidiHelperMixin
     from resolvers import ResolverMixin
+    from serum_commands import SerumCommandMixin
     from serialization import SerializationMixin
     from track_commands import TrackCommandMixin
     from utilities import UtilityMixin
@@ -65,6 +67,7 @@ class CodexBridge(
     CommandDispatcherMixin,
     LomCommandMixin,
     DeviceCommandMixin,
+    SerumCommandMixin,
     DrumPadCommandMixin,
     ClipCommandMixin,
     ClipEnvelopeCommandMixin,

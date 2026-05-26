@@ -19,6 +19,7 @@ READ_ONLY_COMMANDS = {
     "midi-get-notes",
     "clip-stock-automation-get",
     "params",
+    "serum-params",
 }
 
 

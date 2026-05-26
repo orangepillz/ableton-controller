@@ -56,8 +56,10 @@ def _command_checkpoints(command: str) -> list[str]:
     checkpoints = []
     if "arrangement-marker-naming" in normalized or "set-locator" in normalized:
         checkpoints.append("locators")
-    if "drum-pad-load" in normalized or "device-add-stock" in normalized:
+    if "drum-pad-load" in normalized or "device-add-stock" in normalized or "serum-add" in normalized:
         checkpoints.append("device-tree")
+    if "serum-set" in normalized:
+        checkpoints.append("serum-params")
     if "drum-punch-bus" in normalized or "personalized-space-chain" in normalized or "mix-bus-control" in normalized:
         checkpoints.append("device-tree")
     if "set-stock-control" in normalized or "stock-controls" in normalized:

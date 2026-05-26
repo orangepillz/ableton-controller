@@ -16,6 +16,7 @@ KNOWN_COMMANDS = {
     "ping", "status", "tracks", "selected", "select-track", "devices", "device-tree",
     "session-snapshot", "copilot-intent", "workflow-macro",
     "device-add-stock", "device-move", "device-delete", "drum-pad-load", "params", "stock-devices",
+    "serum-add", "serum-params", "serum-set", "serum-set-many",
     "stock-controls", "stock-coverage", "set-stock-control", "set-track", "set-send",
     "set-param", "tempo", "play", "stop", "continue", "undo", "redo", "hotkey",
     "key-sequence", "type-text", "menu-search", "save", "lom-get", "lom-set",

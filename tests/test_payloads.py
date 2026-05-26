@@ -59,6 +59,59 @@ class PayloadTests(unittest.TestCase):
             },
         )
 
+    def test_serum_add_payload_defaults_to_vst_format(self):
+        self.assertEqual(
+            self.payload_for("serum-add", "--target-track", "Lead"),
+            {
+                "command": "serum_add",
+                "target_track": "Lead",
+                "format": "vst",
+            },
+        )
+
+    def test_serum_set_payload_accepts_instance_selector(self):
+        self.assertEqual(
+            self.payload_for(
+                "serum-set",
+                "--track",
+                "Lead",
+                "--instance",
+                "1",
+                "--param",
+                "Filter Cutoff",
+                "--normalized",
+                "0.45",
+            ),
+            {
+                "command": "serum_set_param",
+                "track": "Lead",
+                "instance": 1,
+                "param": "Filter Cutoff",
+                "normalized": 0.45,
+            },
+        )
+
+    def test_serum_set_many_payload_validates_controls(self):
+        self.assertEqual(
+            self.payload_for(
+                "serum-set-many",
+                "--device-path",
+                "song.tracks[0].devices[2]",
+                "--controls",
+                '[{"param":"Filter Cutoff","normalized":0.45},{"param":"WT Pos","delta":0.05}]',
+            ),
+            {
+                "command": "serum_set_many",
+                "device_path": "song.tracks[0].devices[2]",
+                "controls": [
+                    {"param": "Filter Cutoff", "normalized": 0.45},
+                    {"param": "WT Pos", "delta": 0.05},
+                ],
+            },
+        )
+        with self.assertRaises(SystemExit):
+            self.payload_for("serum-set-many", "--track", "Lead", "--controls", '[{"param":"Cutoff"}]')
+
     def test_clip_create_midi_requires_length_for_session_clip(self):
         with self.assertRaises(SystemExit):
             self.payload_for("clip-create-midi", "--track", "Synth", "--slot", "0")

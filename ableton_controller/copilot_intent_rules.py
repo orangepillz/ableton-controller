@@ -5,6 +5,14 @@ from __future__ import annotations
 
 INTENT_RULES = (
     {
+        "id": "serum-synth-control",
+        "title": "Serum Instrument Loading And Control",
+        "terms": ("serum", "xfer", "vst", "vst3", "plugin synth", "wavetable synth"),
+        "commands": ("serum-add", "serum-params", "serum-set", "serum-set-many", "device-tree"),
+        "planning_bias": "For Serum requests, add the VST with serum-add, inspect exposed parameters, then use serum-set for targeted controls.",
+        "likely_followups": ("verify Serum parameter names", "choose a specific Serum instance", "automate exposed controls"),
+    },
+    {
         "id": "kick-sub-sidechain",
         "title": "Kick/Sub Sidechain And Low-End Separation",
         "terms": ("sidechain", "sc", "sc trigger", "kick", "sub", "bd"),

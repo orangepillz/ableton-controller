@@ -17,7 +17,9 @@ class DeviceCommandMixin(object):
             if self._safe_get(item, "source", "") != "Built-in":
                 raise ValueError("Browser item is not a built-in Live device: %s" % self._safe_get(item, "name", ""))
 
-        target_index = payload.get("target_index", None)
+        return self._load_device_item_to_container(container, item, payload.get("target_index", None))
+
+    def _load_device_item_to_container(self, container, item, target_index):
         owner_track = self._track_for_container(container)
         owner_order = list(owner_track.devices)
         container_order = owner_order if container == owner_track else list(container.devices)
@@ -29,7 +31,7 @@ class DeviceCommandMixin(object):
             pass
 
         if hasattr(container, "insert_device"):
-            name = self._safe_get(item, "name", payload.get("name") or payload.get("path"))
+            name = self._safe_get(item, "name", "")
             args = [str(name)] if target_index is None else [str(name), int(target_index)]
             try:
                 container.insert_device(*args)

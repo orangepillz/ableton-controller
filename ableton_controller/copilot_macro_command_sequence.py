@@ -12,6 +12,7 @@ READ_ONLY_HEADS = {
     "locators",
     "midi-get-notes",
     "params",
+    "serum-params",
     "session-snapshot",
     "stock-controls",
 }
