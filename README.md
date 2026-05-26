@@ -72,7 +72,10 @@ abletonctl tracks
 abletonctl session-snapshot
 ```
 
-Render deterministic audio probes for verification:
+Render deterministic audio probes for verification. The command uses a
+temporary Live resampling track, converts the recorded audio to the requested
+WAV path, cleans up the temporary recording source, writes a manifest, and
+restores the set state:
 
 ```sh
 abletonctl render-audio --start-bar 65 --bars 8 \

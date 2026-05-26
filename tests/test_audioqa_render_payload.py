@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
+from ableton_controller.config import LOCAL_COMMANDS
 from ableton_controller.parser import build_parser
-from ableton_controller.payloads import command_payload
+from ableton_controller.render_audio import _prepare_payload
 
 
-class RenderAudioPayloadTests(unittest.TestCase):
-    def test_render_audio_payload_defaults_and_targets(self):
+class RenderAudioLocalCommandTests(unittest.TestCase):
+    def test_render_audio_is_local_command_and_prepare_payload_has_targets(self):
         parser = build_parser()
         args = parser.parse_args(
             [
@@ -26,8 +28,9 @@ class RenderAudioPayloadTests(unittest.TestCase):
                 ".ableton-audits/renders/drop_1_kick.wav",
             ]
         )
-        payload = command_payload(args)
-        self.assertEqual(payload["command"], "render_audio")
+        self.assertIn(args.command, LOCAL_COMMANDS)
+        payload = _prepare_payload(args, Path(args.output).resolve())
+        self.assertEqual(payload["command"], "render_audio_prepare")
         self.assertEqual(payload["start_bar"], 65.0)
         self.assertEqual(payload["bars"], 4.0)
         self.assertEqual(payload["solo_tracks"], ["Kick", "BASS", "Snare"])
@@ -36,7 +39,6 @@ class RenderAudioPayloadTests(unittest.TestCase):
         self.assertEqual(payload["bit_depth"], 24)
         self.assertFalse(payload["normalize"])
         self.assertTrue(payload["restore_state"])
-        self.assertTrue(payload["create_manifest"])
         self.assertIn("output_file_abs", payload)
 
 

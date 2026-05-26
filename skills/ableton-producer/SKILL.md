@@ -97,6 +97,10 @@ bin/ableton-audioqa compare --primary .ableton-audits/renders/drop_1_kick_solo.w
   --output .ableton-audits/reports/drop_1_kick_context.audioqa.json
 ```
 
+`render-audio` is implemented as a temporary Live resampling track. It cleans up
+the temporary recording source after conversion, avoids the Export Audio/Video
+dialog, and does not depend on speakers, microphones, or room playback.
+
 For each major drop, render and verify full mix, drums bus, bass bus, kick solo,
 snare solo, kick plus bass context, snare plus drums context, transition in, and
 transition out. For new sound-design elements, render `<sound>_solo.wav`,

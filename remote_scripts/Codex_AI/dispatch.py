@@ -20,8 +20,12 @@ class CommandDispatcherMixin(object):
             track = self._resolve_track(payload.get("track"))
             self.song().view.selected_track = track
             return self._track_info(track, self._track_index(track), self._track_kind(track))
-        if command == "render_audio":
-            return self._render_audio(payload)
+        if command == "render_audio_prepare":
+            return self._render_audio_prepare(payload)
+        if command == "render_audio_finish":
+            return self._render_audio_finish(payload)
+        if command == "render_audio_cancel":
+            return self._render_audio_cancel(payload)
         if command == "devices":
             track = self._resolve_track(payload.get("track"))
             return {"track": track.name, "devices": self._device_infos(track)}

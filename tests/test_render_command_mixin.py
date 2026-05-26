@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-import json
 import importlib.util
-import tempfile
 import unittest
-import wave
 from pathlib import Path
-
-import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RENDER_MODULE = REPO_ROOT / "remote_scripts" / "Codex_AI" / "render_commands.py"
@@ -23,28 +18,55 @@ class FakeView:
         self.selected_track = track
 
 
-class FakeTrack:
+class FakeRouting:
     def __init__(self, name: str):
+        self.name = name
+        self.display_name = name
+
+
+class FakeClip:
+    file_path = "/tmp/fake-render.aif"
+
+
+class FakeClipSlot:
+    def __init__(self):
+        self.has_clip = False
+        self.clip = None
+        self.fired_length = None
+
+    def fire(self, length):
+        self.fired_length = length
+        self.has_clip = True
+        self.clip = FakeClip()
+
+
+class FakeTrack:
+    def __init__(self, name: str, can_arm: bool = True):
         self.name = name
         self.mute = False
         self.solo = False
+        self.arm = False
+        self.clip_slots = [FakeClipSlot()]
+        self.available_input_routing_types = [FakeRouting("Ext. In"), FakeRouting("Resampling")]
+        self.input_routing_type = self.available_input_routing_types[0]
+        self.current_monitoring_state = 0
+        self.can_be_armed = can_arm
 
 
 class FakeSong:
     def __init__(self):
         self.tracks = [FakeTrack("Kick"), FakeTrack("Bass")]
-        self.return_tracks = [FakeTrack("A-Reverb")]
-        self.master_track = FakeTrack("Master")
+        self.return_tracks = [FakeTrack("A-Reverb", can_arm=False)]
+        self.master_track = FakeTrack("Master", can_arm=False)
         self.view = FakeView(self.tracks[1])
         self.signature_numerator = 4
-        self.tempo = 87
+        self.tempo = 120
         self.file_path = "/tmp/test_set.als"
         self.is_playing = True
         self.current_song_time = 12.0
         self.loop = False
         self.loop_start = 8.0
         self.loop_length = 4.0
-        self.export_calls = []
 
     def stop_playing(self):
         self.is_playing = False
@@ -52,9 +74,13 @@ class FakeSong:
     def start_playing(self):
         self.is_playing = True
 
-    def export_audio(self, output, start, length, settings):
-        self.export_calls.append({"output": output, "start": start, "length": length, "settings": settings})
-        write_silent_wav(Path(output))
+    def create_audio_track(self, index):
+        track = FakeTrack("New Audio")
+        self.tracks.insert(index, track)
+        return track
+
+    def delete_track(self, index):
+        del self.tracks[index]
 
 
 class FakeBridge(RenderCommandMixin):
@@ -73,52 +99,72 @@ class FakeBridge(RenderCommandMixin):
                 return track
         raise ValueError(identifier)
 
+    def _track_index(self, track):
+        return self._song.tracks.index(track)
+
+    def _track_kind(self, track):
+        return "return" if track in self._song.return_tracks else "track"
+
+    def _match_routing(self, values, requested):
+        for value in values:
+            if value.name == requested:
+                return value
+        raise ValueError(requested)
+
 
 class RenderCommandMixinTests(unittest.TestCase):
-    def test_render_audio_writes_manifest_and_restores_state(self):
+    def test_resampling_prepare_and_finish_restore_state(self):
         song = FakeSong()
         song.tracks[0].mute = True
         song.tracks[1].solo = True
         bridge = FakeBridge(song)
-        with tempfile.TemporaryDirectory() as temp:
-            output = Path(temp) / "kick.wav"
-            result = bridge._render_audio(
-                {
-                    "output_file": str(output),
-                    "output_file_abs": str(output),
-                    "start_bar": 3,
-                    "bars": 2,
-                    "solo_tracks": ["Kick"],
-                    "muted_tracks": ["Bass"],
-                    "include_returns": False,
-                    "sample_rate": 48000,
-                    "bit_depth": 24,
-                    "normalize": False,
-                    "create_manifest": True,
-                    "restore_state": True,
-                }
-            )
-            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
-        self.assertTrue(result["done"])
+        prepared = bridge._render_audio_prepare(
+            {
+                "start_bar": 3,
+                "bars": 2,
+                "solo_tracks": ["Kick"],
+                "muted_tracks": ["Bass"],
+                "include_returns": False,
+                "restore_state": True,
+            }
+        )
+        temp_track = song.tracks[-1]
+        self.assertEqual(temp_track.input_routing_type.name, "Resampling")
+        self.assertEqual(temp_track.clip_slots[0].fired_length, 8.0)
+        finished = bridge._render_audio_finish({"state_id": prepared["state_id"]})
+        self.assertEqual(finished["source_file"], "/tmp/fake-render.aif")
+        self.assertTrue(finished["restored_state"])
+        self.assertEqual([track.name for track in song.tracks], ["Kick", "Bass"])
         self.assertTrue(song.tracks[0].mute)
         self.assertTrue(song.tracks[1].solo)
         self.assertEqual(song.loop_start, 8.0)
         self.assertEqual(song.loop_length, 4.0)
         self.assertTrue(song.is_playing)
-        self.assertEqual(song.export_calls[0]["start"], 8.0)
-        self.assertEqual(song.export_calls[0]["length"], 8.0)
-        self.assertEqual(manifest["render_id"], "kick")
-        self.assertEqual(manifest["solo_tracks"], ["Kick"])
-        self.assertTrue(manifest["restored_state"])
 
+    def test_cancel_deletes_temp_track_and_restores_state(self):
+        song = FakeSong()
+        bridge = FakeBridge(song)
+        prepared = bridge._render_audio_prepare(
+            {
+                "start_bar": 1,
+                "bars": 1,
+                "solo_tracks": ["Kick"],
+                "muted_tracks": [],
+                "include_returns": True,
+                "restore_state": True,
+            }
+        )
+        self.assertEqual(len(song.tracks), 3)
+        cancelled = bridge._render_audio_cancel({"state_id": prepared["state_id"]})
+        self.assertTrue(cancelled["restored_state"])
+        self.assertEqual([track.name for track in song.tracks], ["Kick", "Bass"])
+        self.assertTrue(song.is_playing)
 
-def write_silent_wav(path: Path) -> None:
-    samples = np.zeros(256, dtype="<i2")
-    with wave.open(str(path), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(48000)
-        wav.writeframes(samples.tobytes())
+    def test_delete_stale_temp_track_does_not_delete_real_track(self):
+        song = FakeSong()
+        bridge = FakeBridge(song)
+        bridge._delete_track_object(FakeTrack("stale"))
+        self.assertEqual([track.name for track in song.tracks], ["Kick", "Bass"])
 
 
 if __name__ == "__main__":

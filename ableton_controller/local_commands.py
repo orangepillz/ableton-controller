@@ -27,6 +27,7 @@ from .local_clip_envelopes import (
 from .copilot_intent import match_copilot_intent
 from .local_automation import applescript_string, run_applescript, run_hotkey, run_menu_search
 from .payload_helpers import clip_automation_device_ref_payload, clip_ref_payload, device_ref_payload
+from .render_audio import render_audio
 from .serum_preset import build_serum_preset
 from .session_snapshot import collect_session_snapshot
 from .stock_cli import resolve_stock_control, stock_device_listing, stock_device_query_text, stock_value_payload
@@ -87,6 +88,8 @@ def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
             min_score=args.min_score,
             include_inactive=args.include_inactive,
         )
+    if args.command == "render-audio":
+        return render_audio(args, send_local_bridge_command)
     if args.command == "session-snapshot":
         return collect_session_snapshot(args, lambda payload: send_local_bridge_command(args, payload))
     if args.command == "workflow-macro":

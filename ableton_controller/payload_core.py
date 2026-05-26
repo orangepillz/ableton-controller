@@ -1,9 +1,8 @@
 """Payload builders for core commands."""
 
 import json
-from pathlib import Path
 
-from .arg_types import scalar_value, track_value
+from .arg_types import scalar_value
 from .payload_helpers import device_ref_payload
 
 def build_core_payload(args):
@@ -18,27 +17,6 @@ def build_core_payload(args):
         return {"command": "selected", "devices": args.devices}
     if command == "select-track":
         return {"command": "select_track", "track": args.track}
-    if command == "render-audio":
-        output = Path(args.output).expanduser()
-        return {
-            "command": "render_audio",
-            "start_bar": args.start_bar,
-            "bars": args.bars,
-            "output_file": args.output,
-            "output_file_abs": str(output.resolve()),
-            "solo_tracks": _render_track_list(args.solo_track, args.solo_tracks),
-            "solo_groups": list(args.solo_group or []),
-            "muted_tracks": list(args.mute_track or []),
-            "muted_groups": list(args.mute_group or []),
-            "include_returns": args.include_returns,
-            "sample_rate": args.sample_rate,
-            "bit_depth": args.bit_depth,
-            "normalize": args.normalize,
-            "create_manifest": args.create_manifest,
-            "restore_state": args.restore_state,
-            "request_timeout": args.request_timeout,
-        }
-
     if command == "set-track":
         fields = {
             key: getattr(args, key)
@@ -95,10 +73,3 @@ def build_core_payload(args):
     if command == "toggle-browse":
         return {"command": "view", "action": "toggle-browse"}
     return None
-
-
-def _render_track_list(repeated, comma_separated):
-    values = list(repeated or [])
-    if comma_separated:
-        values.extend(track_value(item.strip()) for item in comma_separated.split(",") if item.strip())
-    return values

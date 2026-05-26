@@ -8,7 +8,7 @@ solo and context gates pass.
 
 ## Render Probes
 
-Use `abletonctl render-audio` to export deterministic Arrangement probes:
+Use `abletonctl render-audio` to create deterministic Arrangement probes:
 
 ```sh
 abletonctl render-audio --start-bar 65 --bars 8 \
@@ -25,16 +25,19 @@ abletonctl render-audio --solo-tracks "Kick,BASS" --start-bar 65 --bars 8 \
 ```
 
 Defaults are 48 kHz, 24-bit, no normalization, returns included, manifest on,
-and state restoration on. The bridge saves mute, solo, loop, selected-track,
-transport, and playhead state, applies the requested solo/mute range, exports,
-validates that a readable WAV exists, writes a sibling manifest, then restores
-state. If Live does not expose a callable export method or no WAV appears, the
-command exits nonzero.
+and state restoration on. The command creates a temporary audio track routed to
+Live's `Resampling` input, saves mute, solo, loop, selected-track, transport,
+and playhead state, applies the requested solo/mute range, records the requested
+bar range, converts Live's recorded audio file to the exact requested WAV path,
+writes a sibling manifest, deletes the temporary track, removes the temporary
+recording source file when it can identify that Codex-created source safely, and
+restores state.
 
-Known limitation: the MIDI Remote Script can only render when the running Live
-version exposes a callable export method to Python. Sample-rate, bit-depth, and
-normalization options are passed to that method when supported; otherwise the
-command fails rather than silently producing unverifiable output.
+Known limitation: resampling records at the running Live set's audio engine
+settings. The requested sample-rate, bit-depth, and normalization values are
+preserved in the manifest, and the actual WAV sample-rate and bit-depth are
+recorded separately. The command exits nonzero if Live does not create a
+recorded clip or the resulting file is not a readable WAV.
 
 ## Required Drop Render Set
 

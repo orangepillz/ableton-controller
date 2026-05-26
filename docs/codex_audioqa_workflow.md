@@ -3,6 +3,11 @@
 For sound design and mix-impact work, Codex must use rendered reports as the
 completion evidence.
 
+`abletonctl render-audio` creates those files by recording a temporary Live
+resampling track, converting the recording to the requested WAV path, writing a
+manifest, deleting the temporary track, cleaning up the temporary recording
+source, and restoring set state.
+
 1. Inspect the Live set with `abletonctl session-snapshot`.
 2. Identify the target section, track, group, or sound.
 3. Create or modify the set.
