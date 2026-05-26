@@ -7,6 +7,7 @@ STOCK_DEVICE_ROOTS = ("instruments", "audio_effects", "midi_effects", "max_for_l
 
 LOCAL_COMMANDS = {
     "copilot-intent",
+    "render-audio",
     "session-snapshot",
     "workflow-macro",
     "arrangement-automation-file-get",

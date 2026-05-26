@@ -1,0 +1,12 @@
+[project]
+name = "ableton-audioqa"
+version = "0.1.0"
+description = "Deterministic rendered-audio verification harness for ableton-controller."
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26"]
+
+[project.scripts]
+ableton-audioqa = "ableton_audioqa.cli:main"
+
+[tool.setuptools]
+packages = ["ableton_audioqa", "ableton_audioqa.gates"]

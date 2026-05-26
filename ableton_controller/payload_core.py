@@ -17,7 +17,6 @@ def build_core_payload(args):
         return {"command": "selected", "devices": args.devices}
     if command == "select-track":
         return {"command": "select_track", "track": args.track}
-
     if command == "set-track":
         fields = {
             key: getattr(args, key)

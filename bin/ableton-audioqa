@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_self() {
+  local source source_dir link_target
+  source="${BASH_SOURCE[0]}"
+  while [ -L "$source" ]; do
+    source_dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+    link_target="$(readlink "$source")"
+    case "$link_target" in
+      /*) source="$link_target" ;;
+      *) source="$source_dir/$link_target" ;;
+    esac
+  done
+  cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
+}
+
+SCRIPT_DIR="$(resolve_self)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
+
+exec python3 -m audioqa.ableton_audioqa.cli "$@"

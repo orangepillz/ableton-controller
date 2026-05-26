@@ -52,6 +52,86 @@ Translate creative production requests into safe, musical, deterministic Ableton
    - Refresh the touched state with `tracks`, `devices`, `device-tree`, `clips`, `midi-get-notes`, `clip-envelope-get`, or automation reads.
    - Summarize what changed, what was musically intended, and any follow-up options that naturally fit.
 
+## Mandatory Audio Verification Loop
+
+For any task involving sound design, drum impact, bass movement, drop energy,
+mix balance, transition quality, or arrangement impact, render audio and run
+AudioQA before declaring completion. Rendered audio reports are the source of
+truth; racks, device settings, MIDI notes, and automation lanes are only setup
+evidence.
+
+Do not mark a wub, growl, snare, kick, riser, transition, bass phrase, or drop
+complete based only on a plausible device chain or visible automation. Use this
+loop:
+
+1. Inspect the current Live set.
+2. Identify the target section, track, group, or sound.
+3. Create or modify the set.
+4. Render a solo probe with `abletonctl render-audio`.
+5. Run `bin/ableton-audioqa analyze` on the solo probe.
+6. If the solo probe fails, patch the sound and re-render.
+7. Render the sound in bus or drop context.
+8. Run `bin/ableton-audioqa compare` against the context render.
+9. If masked or too loud, patch gain staging, EQ, ducking, or arrangement.
+10. Render the full section and run the `drop` or `full-mix` gate.
+11. Summarize reports with `bin/ableton-audioqa summarize-section`.
+12. Only then mark the task complete, or explicitly disclose remaining failed
+    gates.
+
+Exact command patterns:
+
+```sh
+abletonctl render-audio --start-bar 65 --bars 8 \
+  --output .ableton-audits/renders/drop_1_full_mix.wav
+abletonctl render-audio --solo-track Kick --start-bar 65 --bars 4 \
+  --output .ableton-audits/renders/drop_1_kick_solo.wav
+abletonctl render-audio --solo-tracks "Kick,BASS" --start-bar 65 --bars 8 \
+  --output .ableton-audits/renders/drop_1_kick_bass_context.wav
+
+bin/ableton-audioqa analyze --file .ableton-audits/renders/drop_1_kick_solo.wav \
+  --target kick --tempo 87 \
+  --output .ableton-audits/reports/drop_1_kick_solo.audioqa.json
+bin/ableton-audioqa compare --primary .ableton-audits/renders/drop_1_kick_solo.wav \
+  --context .ableton-audits/renders/drop_1_full_mix.wav \
+  --target kick-audibility --tempo 87 \
+  --output .ableton-audits/reports/drop_1_kick_context.audioqa.json
+```
+
+`render-audio` is implemented as a temporary Live resampling track. It cleans up
+the temporary recording source after conversion, avoids the Export Audio/Video
+dialog, and does not depend on speakers, microphones, or room playback.
+
+For each major drop, render and verify full mix, drums bus, bass bus, kick solo,
+snare solo, kick plus bass context, snare plus drums context, transition in, and
+transition out. For new sound-design elements, render `<sound>_solo.wav`,
+`<sound>_context.wav`, and `<sound>_audioqa.json`.
+
+When AudioQA reports multiple failures, fix in this order:
+
+1. Clipping or broken render
+2. Missing kick in drop
+3. Missing or weak snare in drop
+4. Low-end masking between kick, sub, reese, and wub layers
+5. Bass movement and articulation
+6. Drop energy versus build energy
+7. Transition impact
+8. Microfills and glitches
+9. Stereo ear candy
+10. Atmospheric polish
+
+Never add more ear candy, atmospheres, or decorative layers while critical kick,
+snare, clipping, or low-end gates are failing.
+
+Prohibited behaviors:
+
+- Assuming a sound works because its device chain looks plausible.
+- Assuming a wub exists because Auto Filter automation exists.
+- Assuming a snare slaps because there is a white-noise envelope.
+- Assuming a kick hits because there is a MIDI note on a kick track.
+- Adding more layers before checking masking and gain staging.
+- Ignoring failed AudioQA reports or missing render artifacts.
+- Sampling copyrighted references; reference files are feature-only.
+
 ## Safety Rules
 
 Ask for confirmation before:
@@ -143,5 +223,6 @@ For executed changes, present:
 ```text
 Done. I changed ...
 Why: one short production reason, when useful.
-Verified with: command names or refreshed state.
+Verified with: command names, refreshed state, and AudioQA report paths for
+sound-design or mix-impact tasks.
 ```
