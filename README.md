@@ -72,6 +72,32 @@ abletonctl tracks
 abletonctl session-snapshot
 ```
 
+Render deterministic audio probes for verification:
+
+```sh
+abletonctl render-audio --start-bar 65 --bars 8 \
+  --output .ableton-audits/renders/drop_1_full_mix.wav
+abletonctl render-audio --solo-track Kick --start-bar 65 --bars 4 \
+  --output .ableton-audits/renders/drop_1_kick_solo.wav
+```
+
+Then analyze the files with AudioQA:
+
+```sh
+bin/ableton-audioqa analyze \
+  --file .ableton-audits/renders/drop_1_kick_solo.wav \
+  --target kick \
+  --output .ableton-audits/reports/drop_1_kick_solo.audioqa.json
+bin/ableton-audioqa compare \
+  --primary .ableton-audits/renders/drop_1_kick_solo.wav \
+  --context .ableton-audits/renders/drop_1_full_mix.wav \
+  --target kick-audibility \
+  --output .ableton-audits/reports/drop_1_kick_context.audioqa.json
+```
+
+See `docs/audio_verification_harness.md` and `docs/codex_audioqa_workflow.md`
+for the closed-loop render, analyze, patch, and summarize workflow.
+
 `session-snapshot` runs the standard read-only planning probes in one command:
 status, tracks, selected track, and selected-track devices/clips. Add repeated
 `--track` flags to include extra target tracks, and `--device-tree-depth` when a

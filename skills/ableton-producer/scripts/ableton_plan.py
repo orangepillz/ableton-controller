@@ -13,7 +13,7 @@ from typing import Any
 
 
 KNOWN_COMMANDS = {
-    "ping", "status", "tracks", "selected", "select-track", "devices", "device-tree",
+    "ping", "status", "tracks", "selected", "select-track", "render-audio", "devices", "device-tree",
     "session-snapshot", "copilot-intent", "workflow-macro",
     "device-add-stock", "device-move", "device-delete", "drum-pad-load", "params", "stock-devices",
     "serum-add", "serum-params", "serum-names", "serum-set", "serum-set-many",

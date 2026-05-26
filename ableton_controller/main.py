@@ -16,7 +16,9 @@ def main(argv: list[str] | None = None) -> int:
             print_json(run_local_command(args))
             return 0
         payload = command_payload(args)
-        response = send(payload, args.host, args.port, args.timeout)
+        request_timeout = getattr(args, "request_timeout", None)
+        timeout = max(args.timeout, float(request_timeout) + 5.0) if request_timeout is not None else args.timeout
+        response = send(payload, args.host, args.port, timeout)
         print_json(response.get("result", response))
     except (FileNotFoundError, ValueError) as exc:
         raise SystemExit(str(exc))

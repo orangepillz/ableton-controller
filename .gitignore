@@ -6,5 +6,16 @@ data/*
 !data/
 !data/stock_device_controls.live12.json
 audit/
-.ableton-copilot/
+.ableton-copilot/*
+!.ableton-copilot/references/
+!.ableton-copilot/references/**
+!.ableton-copilot/reference_features.json
+.ableton-audits/renders/*
+.ableton-audits/reports/*
+.ableton-audits/manifests/*
+.ableton-audits/screenshots/*
+!.ableton-audits/renders/.gitkeep
+!.ableton-audits/reports/.gitkeep
+!.ableton-audits/manifests/.gitkeep
+!.ableton-audits/screenshots/.gitkeep
 plans/

@@ -22,6 +22,7 @@ try:
     from .lom_resolver import LomResolverMixin
     from .midi_commands import MidiCommandMixin
     from .midi_helpers import MidiHelperMixin
+    from .render_commands import RenderCommandMixin
     from .resolvers import ResolverMixin
     from .serum_commands import SerumCommandMixin
     from .serialization import SerializationMixin
@@ -44,6 +45,7 @@ except ImportError:
     from lom_resolver import LomResolverMixin
     from midi_commands import MidiCommandMixin
     from midi_helpers import MidiHelperMixin
+    from render_commands import RenderCommandMixin
     from resolvers import ResolverMixin
     from serum_commands import SerumCommandMixin
     from serialization import SerializationMixin
@@ -78,6 +80,7 @@ class CodexBridge(
     TrackCommandMixin,
     MidiCommandMixin,
     ClipReferenceMixin,
+    RenderCommandMixin,
     AutomationHelperMixin,
     WarpMarkerMixin,
     MidiHelperMixin,
@@ -138,7 +141,8 @@ class CodexBridge(
             payload = json.loads(raw.decode("utf-8"))
             request = _Request(payload)
             self._requests.put(request)
-            if not request.event.wait(7.5):
+            wait_timeout = max(7.5, float(payload.get("request_timeout", 7.5) or 7.5))
+            if not request.event.wait(wait_timeout):
                 response = {"ok": False, "error": "Timed out waiting for Live thread"}
             else:
                 response = request.response
