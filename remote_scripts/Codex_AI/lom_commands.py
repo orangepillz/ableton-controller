@@ -13,9 +13,11 @@ class LomCommandMixin(object):
         return {"path": path, "value": self._serialize(getattr(target, attribute))}
 
     def _lom_call(self, payload):
-        method = self._resolve_lom_path(payload.get("path"))
+        path = payload.get("path")
+        self._reject_unsafe_lom_call(path)
+        method = self._resolve_lom_path(path)
         if not callable(method):
-            raise ValueError("LOM path is not callable: %r" % (payload.get("path"),))
+            raise ValueError("LOM path is not callable: %r" % (path,))
         args = payload.get("args", [])
         kwargs = payload.get("kwargs", {})
         if not isinstance(args, list):
@@ -23,6 +25,11 @@ class LomCommandMixin(object):
         if not isinstance(kwargs, dict):
             raise ValueError("kwargs must be an object")
         return self._serialize(method(*args, **kwargs))
+
+    def _reject_unsafe_lom_call(self, path):
+        text = str(path or "")
+        if text.endswith(".store_chosen_bank"):
+            raise ValueError("Unsafe LOM call rejected: PluginDevice.store_chosen_bank can crash Live")
 
     def _lom_inspect(self, payload):
         obj = self._resolve_lom_path(payload.get("path"))

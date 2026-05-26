@@ -27,6 +27,7 @@ from .local_clip_envelopes import (
 from .copilot_intent import match_copilot_intent
 from .local_automation import applescript_string, run_applescript, run_hotkey, run_menu_search
 from .payload_helpers import clip_automation_device_ref_payload, clip_ref_payload, device_ref_payload
+from .serum_preset import build_serum_preset
 from .session_snapshot import collect_session_snapshot
 from .stock_cli import resolve_stock_control, stock_device_listing, stock_device_query_text, stock_value_payload
 from .transport import send
@@ -92,6 +93,8 @@ def run_local_command(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "list":
             return list_workflow_macros()
         return render_workflow_macro(args)
+    if args.command == "serum-build-preset":
+        return build_serum_preset(args)
     if args.command == "arrangement-automation-file-get":
         return arrangement_file_get(args.set_file, args.track, args.arrangement_start, args.device, args.param)
     if args.command == "arrangement-automation-file-set":

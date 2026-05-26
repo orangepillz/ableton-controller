@@ -56,4 +56,9 @@ if ! PYTHON="$(find_python)"; then
   exit 127
 fi
 
+if [ "${1:-}" = "serum-build-preset" ]; then
+  shift
+  exec "$PROJECT_ROOT/scripts/serum_build_preset.sh" "$PROJECT_ROOT" "$PYTHON" "$@"
+fi
+
 exec "$PYTHON" "$PROJECT_ROOT/abletonctl.py" "$@"

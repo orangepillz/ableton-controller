@@ -91,6 +91,17 @@ class PayloadTests(unittest.TestCase):
             },
         )
 
+    def test_serum_names_payload_accepts_range(self):
+        self.assertEqual(
+            self.payload_for("serum-names", "--track", "Lead", "--start", "8", "--end", "16"),
+            {
+                "command": "serum_names",
+                "track": "Lead",
+                "start": 8,
+                "end": 16,
+            },
+        )
+
     def test_serum_set_many_payload_validates_controls(self):
         self.assertEqual(
             self.payload_for(

@@ -12,6 +12,22 @@ class SerumCommandMixin(object):
         device = self._resolve_serum_device(payload)
         return {"device": self._device_info(device, self._device_index(device)), "parameters": self._parameter_infos(device)}
 
+    def _serum_names(self, payload):
+        device = self._resolve_serum_device(payload)
+        get_names = getattr(device, "get_parameter_names", None)
+        if not callable(get_names):
+            raise ValueError("Serum device does not expose get_parameter_names")
+        start = max(0, int(payload.get("start", 0)))
+        end = int(payload.get("end", -1))
+        names = list(get_names(start, end))
+        return {
+            "device": self._device_info(device, self._device_index(device)),
+            "start": start,
+            "end": end,
+            "length": len(names),
+            "names": names,
+        }
+
     def _serum_set_param(self, payload):
         device = self._resolve_serum_device(payload)
         parameter = self._apply_serum_control(device, payload)
@@ -77,7 +93,6 @@ class SerumCommandMixin(object):
         if (
             normalized_name in self._normalize_name(haystack)
             and self._safe_get(item, "is_loadable", False)
-            and self._safe_get(item, "is_device", True) is not False
             and self._serum_format_matches(item, path, plugin_format)
         ):
             matches.append({"item": item, "path": path})

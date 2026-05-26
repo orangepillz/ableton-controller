@@ -20,6 +20,13 @@ def build_serum_payload(args):
         return payload
     if command == "serum-params":
         return {"command": "serum_params", **serum_device_ref_payload(args)}
+    if command == "serum-names":
+        return {
+            "command": "serum_names",
+            **serum_device_ref_payload(args),
+            "start": args.start,
+            "end": args.end,
+        }
     if command == "serum-set":
         payload = {"command": "serum_set_param", **serum_device_ref_payload(args), "param": args.param}
         add_serum_value(payload, args)

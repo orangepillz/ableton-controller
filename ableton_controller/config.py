@@ -16,6 +16,7 @@ LOCAL_COMMANDS = {
     "type-text",
     "menu-search",
     "save",
+    "serum-build-preset",
     "stock-devices",
     "stock-controls",
     "stock-coverage",

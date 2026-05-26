@@ -38,12 +38,20 @@ class FakeParameter:
 
 
 class FakeDevice:
-    def __init__(self, name, parameters=None, class_name="PluginDevice"):
+    def __init__(self, name, parameters=None, class_name="PluginDevice", parameter_names=None):
         self.name = name
         self.class_name = class_name
         self.parameters = parameters or []
+        self.parameter_names = parameter_names or []
+        self.stored_bank = None
         self.can_have_chains = False
         self.canonical_parent = None
+
+    def get_parameter_names(self, start=0, end=-1):
+        names = self.parameter_names
+        if end < 0:
+            return names[start:]
+        return names[start:end]
 
 
 class FakeTrack:
@@ -125,11 +133,14 @@ class FakeBridge(
     def application(self):
         return SimpleNamespace(browser=self.browser)
 
+    def instance_identifier(self):
+        return 1234
+
 
 def serum_plugins_root():
-    vst2 = FakeBrowserItem("Serum", source="VST", uri="vst://xfer/serum", is_loadable=True)
-    vst3 = FakeBrowserItem("Serum", source="VST3", uri="vst3://xfer/serum", is_loadable=True)
-    audio_unit = FakeBrowserItem("Serum", source="Audio Unit", uri="au://xfer/serum", is_loadable=True)
+    vst2 = FakeBrowserItem("Serum", source="VST", uri="vst://xfer/serum", is_loadable=True, is_device=False)
+    vst3 = FakeBrowserItem("Serum", source="VST3", uri="vst3://xfer/serum", is_loadable=True, is_device=False)
+    audio_unit = FakeBrowserItem("Serum", source="Audio Unit", uri="au://xfer/serum", is_loadable=True, is_device=False)
     return FakeBrowserItem(
         "Plugins",
         children=[
@@ -159,6 +170,16 @@ class SerumCommandTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "MIDI track"):
             bridge._serum_add({"target_track": "Audio", "format": "vst"})
+
+    def test_serum_names_reads_hidden_plugin_parameter_names(self):
+        serum = FakeDevice("Serum", [FakeParameter("Device On", 1.0)], parameter_names=["MasterVol", "A Vol", "A Pan"])
+        track = FakeTrack("Lead", [serum])
+        bridge = FakeBridge([track], serum_plugins_root())
+
+        result = bridge._serum_names({"track": "Lead", "start": 1, "end": 3})
+
+        self.assertEqual(result["names"], ["A Vol", "A Pan"])
+        self.assertEqual(result["length"], 2)
 
     def test_serum_set_targets_selected_instance(self):
         first = FakeDevice("Serum", [FakeParameter("Filter Cutoff", 100.0, 0.0, 1000.0)])

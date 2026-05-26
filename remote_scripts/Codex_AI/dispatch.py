@@ -31,6 +31,8 @@ class CommandDispatcherMixin(object):
             return self._serum_add(payload)
         if command == "serum_params":
             return self._serum_params(payload)
+        if command == "serum_names":
+            return self._serum_names(payload)
         if command == "serum_set_param":
             return self._serum_set_param(payload)
         if command == "serum_set_many":
